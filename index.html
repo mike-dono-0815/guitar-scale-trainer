@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Guitar Scale Trainer</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0d1a;
+  --bg2:       #13132a;
+  --bg3:       #1a1a35;
+  --border:    #252545;
+  --text:      #c8c8e8;
+  --text-dim:  #5858a0;
+  --accent:    #5555cc;
+  --accent-h:  #6666dd;
+  --green:     #44bb66;
+  --red:       #ee4444;
+  --gold:      #ffcc44;
+
+  --label-w: 30px;
+  --open-w:  46px;
+  --fret-w:  54px;
+  --cell-h:  46px;
+  --num-h:   22px;
+  --mkr-h:   14px;
+}
+
+html, body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* â”€â”€ Header â”€â”€ */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.header-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.header-scores { display: flex; gap: 22px; }
+.score-block { text-align: center; }
+.score-block .lbl {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  display: block;
+}
+.score-block .val {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1.1;
+}
+
+/* â”€â”€ Controls â”€â”€ */
+.controls {
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-group label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+select {
+  appearance: none;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 30px 8px 11px;
+  border-radius: 7px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235858a0' fill='none' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+select:focus { border-color: var(--accent); }
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.12s, transform 0.08s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.btn:active { transform: scale(0.96); }
+.btn-primary   { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-h); }
+.btn-warning   { background: #996600; color: #fff; }
+.btn-warning:hover { background: #aa7700; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); }
+
+/* â”€â”€ Game Status Bar â”€â”€ */
+.game-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.game-bar.hidden { display: none; }
+.pill {
+  padding: 3px 11px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.pill-found { background: #0e2a14; color: #44dd77; border: 1px solid #1e4a24; }
+.pill-wrong { background: #2a0e0e; color: #ff7777; border: 1px solid #4a1e1e; }
+#complete-btn { margin-left: auto; }
+
+/* â”€â”€ Fretboard â”€â”€ */
+.fretboard-outer {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 24px 18px 20px;
+  background: var(--bg);
+}
+
+.fretboard {
+  display: grid;
+  grid-template-columns: var(--label-w) var(--open-w) repeat(22, var(--fret-w));
+  grid-template-rows: var(--num-h) var(--mkr-h) repeat(6, var(--cell-h)) var(--mkr-h) var(--num-h);
+  background: #2c1a09;
+  border: 2px solid #5c4020;
+  border-radius: 6px 10px 10px 6px;
+  min-width: max-content;
+  width: max-content;
+}
+
+/* String label cells */
+.slbl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: #1e1006;
+}
+
+/* Fret number cells */
+.fnum {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  background: #1e1006;
+}
+
+/* Marker cells */
+.mcell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1006;
+}
+.mdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b5533;
+}
+.mdbl { display: flex; gap: 5px; }
+.mdbl .mdot { width: 6px; height: 6px; }
+
+/* String cells (fret positions) */
+.scell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 2px solid #7a6030;
+  cursor: pointer;
+}
+.scell.open-pos {
+  border-left: none;
+  border-right: 5px solid #d8cfa8;
+}
+/* String line */
+.scell::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(90deg, #a09860, #787040, #a09860);
+}
+/* String thickness per string index (0=low E, 5=high e) */
+.scell[data-s="0"]::after { height: 3px; }
+.scell[data-s="1"]::after { height: 2.5px; }
+.scell[data-s="2"]::after { height: 2px; }
+.scell[data-s="3"]::after { height: 1.5px; }
+.scell[data-s="4"]::after { height: 1px; }
+.scell[data-s="5"]::after { height: 1px; background: linear-gradient(90deg, #a0a870, #808858, #a0a870); }
+
+/* Note dot */
+.ndot {
+  position: relative;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  transition: transform 0.12s;
+  user-select: none;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.scell:hover .ndot { transform: scale(1.13); }
+.scell:active .ndot { transform: scale(0.95); }
+
+/* â”€â”€ Dot visual states â”€â”€ */
+
+/* Browse: in scale */
+.ndot.b-in {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  /* background & box-shadow set via inline style + --nc var */
+  box-shadow: 0 0 7px var(--nc);
+}
+/* Browse: out of scale */
+.ndot.b-out {
+  background: #252538 !important;
+  color: #3a3a58;
+}
+
+/* Game: undiscovered */
+.ndot.g-hidden {
+  background: #2e2e44 !important;
+  color: #55557a;
+}
+/* Game: correctly found */
+.ndot.g-ok {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 0 9px var(--nc), 0 0 0 2px rgba(255,255,255,0.5);
+}
+/* Game: wrong tap */
+.ndot.g-wrong {
+  background: #440e0e !important;
+  color: #ff6666;
+  box-shadow: 0 0 7px #ff2222;
+}
+.ndot.g-wrong-flash {
+  animation: wrongFlash 0.38s ease forwards;
+}
+@keyframes wrongFlash {
+  0%   { background: #ff1111 !important; transform: scale(1.3); }
+  55%  { background: #550e0e !important; transform: scale(0.92); }
+  100% { background: #440e0e !important; transform: scale(1); }
+}
+
+/* Result: found correctly */
+.ndot.r-found {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 0 8px var(--nc);
+}
+/* Result: missed (in scale but not tapped) */
+.ndot.r-missed {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 0 8px var(--nc), 0 0 0 2px rgba(255,255,255,0.6);
+  animation: missedPulse 1.1s ease-in-out infinite;
+}
+@keyframes missedPulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 1; }
+}
+/* Result: not in scale, not wrong-tapped */
+.ndot.r-out {
+  background: #181828 !important;
+  color: #252540;
+  opacity: 0.25;
+}
+/* Result: wrong tapped (not in scale) */
+.ndot.r-wrong-tap {
+  background: #3a0e0e !important;
+  color: #ff5555;
+  opacity: 0.55;
+}
+
+/* â”€â”€ Result Overlay â”€â”€ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 20px;
+  backdrop-filter: blur(3px);
+}
+.overlay.hidden { display: none; }
+.result-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 28px 24px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+}
+.rc-emoji  { font-size: 2.6rem; margin-bottom: 6px; }
+.rc-title  { font-size: 1.4rem; font-weight: 700; margin-bottom: 3px; }
+.rc-scale  { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 20px; }
+.rc-stats  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.rcs {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 10px 6px;
+}
+.rcs .v { font-size: 1.55rem; font-weight: 700; }
+.rcs .l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); }
+.rcs.s .v { color: var(--gold); }
+.rcs.f .v { color: var(--green); }
+.rcs.w .v { color: var(--red); }
+.rc-session { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
+.rc-session span { color: var(--gold); font-weight: 700; }
+.rc-btns { display: flex; gap: 10px; justify-content: center; }
+
+/* â”€â”€ Color Legend â”€â”€ */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  padding: 10px 20px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+}
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; color: var(--text-dim); }
+.legend-swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* â”€â”€ Mobile â”€â”€ */
+@media (max-width: 600px) {
+  :root {
+    --label-w: 26px;
+    --open-w:  38px;
+    --fret-w:  42px;
+    --cell-h:  42px;
+    --num-h:   20px;
+    --mkr-h:   12px;
+  }
+  .header { padding: 11px 14px; }
+  .header-title { font-size: 1.05rem; }
+  .controls { padding: 10px 14px; gap: 8px; }
+  .fretboard-outer { padding: 14px 14px 14px 14px; }
+  .ndot { width: 24px; height: 24px; font-size: 0.54rem; }
+  .result-card { padding: 22px 18px 18px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-title">Guitar Scale Trainer</div>
+  <div class="header-scores">
+    <div class="score-block">
+      <span class="lbl">Session</span>
+      <span class="val" id="session-val">0</span>
+    </div>
+    <div class="score-block">
+      <span class="lbl">Rounds</span>
+      <span class="val" id="rounds-val">0</span>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="ctrl-group">
+    <label for="key-sel">Key</label>
+    <select id="key-sel"></select>
+  </div>
+  <div class="ctrl-group">
+    <label for="scale-sel">Scale</label>
+    <select id="scale-sel"></select>
+  </div>
+  <button class="btn btn-primary" id="start-btn">&#9654; Start Game</button>
+</div>
+
+<!-- Game status bar -->
+<div class="game-bar hidden" id="game-bar">
+  <span class="pill pill-found" id="found-pill">Found: 0 / 0</span>
+  <span class="pill pill-wrong" id="wrong-pill">0 mistakes</span>
+  <button class="btn btn-warning" id="complete-btn">Complete Round</button>
+</div>
+
+<!-- Fretboard -->
+<div class="fretboard-outer">
+  <div class="fretboard" id="fretboard"></div>
+</div>
+
+<!-- Legend -->
+<div class="legend" id="legend"></div>
+
+<!-- Result overlay -->
+<div class="overlay hidden" id="overlay">
+  <div class="result-card">
+    <div class="rc-emoji"  id="rc-emoji">&#127881;</div>
+    <div class="rc-title"  id="rc-title">Round Complete!</div>
+    <div class="rc-scale"  id="rc-scale">E Natural Minor</div>
+    <div class="rc-stats">
+      <div class="rcs s"><div class="v" id="rc-score">0</div><div class="l">Score</div></div>
+      <div class="rcs f"><div class="v" id="rc-found">0/0</div><div class="l">Found</div></div>
+      <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
+    </div>
+    <div class="rc-session">Session total: <span id="rc-session">0</span></div>
+    <div class="rc-btns">
+      <button class="btn btn-primary"   id="next-btn">&#9654; Next Round</button>
+      <button class="btn btn-secondary" id="change-btn">Change Settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// DATA
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+// 12 evenly-spaced hues across the colour wheel
+const NOTE_COLORS = NOTES.map((_, i) => {
+  const hue = i * 30;
+  // Yellow (hue 60 = D) needs slightly lower saturation to avoid harshness
+  const sat = (hue >= 50 && hue <= 70) ? '80%' : '88%';
+  const lit = (hue >= 50 && hue <= 70) ? '58%' : '63%';
+  return `hsl(${hue},${sat},${lit})`;
+});
+
+// Standard tuning lowâ†’high: E A D G B e (semitones from C)
+const OPEN = [4, 9, 2, 7, 11, 4];
+const STRING_NAMES = ['E', 'A', 'D', 'G', 'B', 'e'];
+
+const SCALES = {
+  'Major':            [0, 2, 4, 5, 7, 9, 11],
+  'Natural Minor':    [0, 2, 3, 5, 7, 8, 10],
+  'Minor Pentatonic': [0, 3, 5, 7, 10],
+  'Major Pentatonic': [0, 2, 4, 7, 9],
+  'Blues':            [0, 3, 5, 6, 7, 10],
+};
+
+// Fret position markers
+const MARKERS = {3:'s',5:'s',7:'s',9:'s',12:'d',15:'s',17:'s',19:'s',21:'s'};
+
+const MAX_FRET = 22;
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// STATE
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+let S = {
+  mode: 'browse',       // 'browse' | 'playing' | 'result'
+  root: 4,              // E
+  scale: 'Natural Minor',
+  game: null,
+  session: { score: 0, rounds: 0 },
+};
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// HELPERS
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function noteAt(str, fret)  { return (OPEN[str] + fret) % 12; }
+function pk(str, fret)       { return str * 100 + fret; }  // numeric key
+
+function buildScaleSet(root, scaleName) {
+  return new Set(SCALES[scaleName].map(i => (root + i) % 12));
+}
+
+function buildScalePositions(root, scaleName) {
+  const notes = buildScaleSet(root, scaleName);
+  const pos = new Set();
+  for (let s = 0; s < 6; s++)
+    for (let f = 0; f <= MAX_FRET; f++)
+      if (notes.has(noteAt(s, f))) pos.add(pk(s, f));
+  return pos;
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// BUILD DOM
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function buildSelects() {
+  const ks = document.getElementById('key-sel');
+  NOTES.forEach((n, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = n;
+    if (i === S.root) o.selected = true;
+    ks.appendChild(o);
+  });
+  const ss = document.getElementById('scale-sel');
+  Object.keys(SCALES).forEach(name => {
+    const o = document.createElement('option');
+    o.value = name; o.textContent = name;
+    if (name === S.scale) o.selected = true;
+    ss.appendChild(o);
+  });
+}
+
+function buildLegend() {
+  const leg = document.getElementById('legend');
+  NOTES.forEach((n, i) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-swatch" style="background:${NOTE_COLORS[i]}"></div>${n}`;
+    leg.appendChild(item);
+  });
+}
+
+function addCell(parent, cls, col, row, inner) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.style.gridColumn = col;
+  d.style.gridRow    = row;
+  if (inner) d.innerHTML = inner;
+  parent.appendChild(d);
+  return d;
+}
+
+function buildFretboard() {
+  const fb = document.getElementById('fretboard');
+  fb.innerHTML = '';
+
+  // helper: marker html
+  const markerHTML = f =>
+    !MARKERS[f] ? '' :
+    MARKERS[f] === 'd'
+      ? '<div class="mdbl"><div class="mdot"></div><div class="mdot"></div></div>'
+      : '<div class="mdot"></div>';
+
+  for (let f = 0; f <= MAX_FRET; f++) {
+    const col = f + 2; // col 1 = label, col 2 = open, col 3+ = frets
+    const fn  = f === 0 ? '' : String(f);
+    addCell(fb, 'fnum', col, 1, fn);
+    addCell(fb, 'mcell', col, 2, markerHTML(f));
+    addCell(fb, 'mcell', col, 9, markerHTML(f));
+    addCell(fb, 'fnum', col, 10, fn);
+  }
+
+  for (let s = 0; s < 6; s++) {
+    const row = 8 - s;
+    // String label
+    addCell(fb, 'slbl', 1, row, STRING_NAMES[s]);
+
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const ni   = noteAt(s, f);
+      const col  = f + 2;
+      const cell = addCell(fb, `scell${f === 0 ? ' open-pos' : ''}`, col, row);
+      cell.dataset.s = s;
+      cell.dataset.f = f;
+
+      const dot = document.createElement('div');
+      dot.className = 'ndot';
+      dot.id = `d_${s}_${f}`;
+      dot.style.setProperty('--nc', NOTE_COLORS[ni]);
+      dot.textContent = NOTES[ni];
+      cell.appendChild(dot);
+
+      cell.addEventListener('click', () => onTap(s, f));
+    }
+  }
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// STYLING
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function dot(s, f) { return document.getElementById(`d_${s}_${f}`); }
+
+function setDotClass(d, cls, bg) {
+  d.className = 'ndot ' + cls;
+  d.style.background = bg || '';
+}
+
+function styleAll() {
+  const { mode, root, scale, game } = S;
+  const scalePosSet = buildScalePositions(root, scale);
+
+  for (let s = 0; s < 6; s++) {
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const d   = dot(s, f);
+      const ni  = noteAt(s, f);
+      const col = NOTE_COLORS[ni];
+      const key = pk(s, f);
+      const inScale = scalePosSet.has(key);
+      d.style.setProperty('--nc', col);
+
+      if (mode === 'browse') {
+        if (inScale) setDotClass(d, 'b-in',  col);
+        else          setDotClass(d, 'b-out');
+
+      } else if (mode === 'playing') {
+        if (game.correct.has(key))   setDotClass(d, 'g-ok',    col);
+        else if (game.wrongPos.has(key)) setDotClass(d, 'g-wrong');
+        else                          setDotClass(d, 'g-hidden');
+
+      } else { // result
+        if (inScale) {
+          const cls = game.correct.has(key) ? 'r-found' : 'r-missed';
+          setDotClass(d, cls, col);
+        } else {
+          if (game.wrongPos.has(key)) setDotClass(d, 'r-wrong-tap');
+          else                         setDotClass(d, 'r-out');
+        }
+      }
+    }
+  }
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// GAME
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function startGame() {
+  const scalePos = buildScalePositions(S.root, S.scale);
+  S.game = { scalePos, correct: new Set(), wrongPos: new Set(), wrongCount: 0 };
+  S.mode = 'playing';
+  document.getElementById('overlay').classList.add('hidden');
+  styleAll();
+  refreshUI();
+}
+
+function onTap(s, f) {
+  if (S.mode !== 'playing') return;
+  const g   = S.game;
+  const key = pk(s, f);
+
+  if (g.correct.has(key) || g.wrongPos.has(key)) return; // already tapped
+
+  if (g.scalePos.has(key)) {
+    g.correct.add(key);
+    const d  = dot(s, f);
+    const col = NOTE_COLORS[noteAt(s, f)];
+    d.style.setProperty('--nc', col);
+    setDotClass(d, 'g-ok', col);
+
+    if (g.correct.size === g.scalePos.size) { endRound(); return; }
+  } else {
+    g.wrongCount++;
+    g.wrongPos.add(key);
+    const d = dot(s, f);
+    d.className = 'ndot g-wrong g-wrong-flash';
+    d.style.background = '';
+    // remove flash class after animation
+    setTimeout(() => {
+      if (d.classList.contains('g-wrong-flash')) d.classList.remove('g-wrong-flash');
+    }, 400);
+  }
+  refreshGameBar();
+}
+
+function endRound() {
+  const g = S.game;
+  const roundScore = Math.max(0, 100 - g.wrongCount * 10);
+  S.session.score  += roundScore;
+  S.session.rounds += 1;
+  S.mode = 'result';
+  styleAll();
+  showResult(roundScore);
+  refreshUI();
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// UI REFRESH
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function refreshUI() {
+  const { mode, session } = S;
+  document.getElementById('session-val').textContent = session.score;
+  document.getElementById('rounds-val').textContent  = session.rounds;
+
+  const startBtn = document.getElementById('start-btn');
+  const bar      = document.getElementById('game-bar');
+
+  if (mode === 'playing') {
+    startBtn.textContent = '\u21BA Restart';
+    bar.classList.remove('hidden');
+    refreshGameBar();
+  } else {
+    startBtn.innerHTML = '&#9654; Start Game';
+    bar.classList.add('hidden');
+  }
+}
+
+function refreshGameBar() {
+  const g = S.game;
+  document.getElementById('found-pill').textContent =
+    `Found: ${g.correct.size} / ${g.scalePos.size}`;
+  const w = g.wrongCount;
+  document.getElementById('wrong-pill').textContent =
+    `${w} mistake${w !== 1 ? 's' : ''}`;
+}
+
+function showResult(roundScore) {
+  const g     = S.game;
+  const total = g.scalePos.size;
+  const found = g.correct.size;
+  const wrong = g.wrongCount;
+
+  const emoji    = roundScore >= 90 ? '&#127881;' : roundScore >= 60 ? '&#128077;' : '&#128170;';
+  const headline = roundScore >= 90 ? 'Excellent!' : roundScore >= 60 ? 'Good job!' : 'Keep practicing!';
+  const scaleLbl = `${NOTES[S.root]} ${S.scale}`;
+
+  document.getElementById('rc-emoji').innerHTML  = emoji;
+  document.getElementById('rc-title').textContent = headline;
+  document.getElementById('rc-scale').textContent = scaleLbl;
+  document.getElementById('rc-score').textContent = roundScore;
+  document.getElementById('rc-found').textContent = `${found}/${total}`;
+  document.getElementById('rc-wrong').textContent = wrong;
+  document.getElementById('rc-session').textContent = S.session.score;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// EVENT LISTENERS
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+document.getElementById('key-sel').addEventListener('change', e => {
+  S.root = parseInt(e.target.value, 10);
+  if (S.mode !== 'playing') { S.mode = 'browse'; styleAll(); }
+});
+
+document.getElementById('scale-sel').addEventListener('change', e => {
+  S.scale = e.target.value;
+  if (S.mode !== 'playing') { S.mode = 'browse'; styleAll(); }
+});
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+document.getElementById('complete-btn').addEventListener('click', () => {
+  if (S.mode === 'playing') endRound();
+});
+
+document.getElementById('next-btn').addEventListener('click', startGame);
+
+document.getElementById('change-btn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  S.mode = 'browse';
+  S.game = null;
+  styleAll();
+  refreshUI();
+});
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// INIT
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+buildSelects();
+buildFretboard();
+buildLegend();
+styleAll();
+refreshUI();
+</script>
+</body>
+</html>
