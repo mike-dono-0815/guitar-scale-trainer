@@ -321,6 +321,7 @@ select:focus { border-color: var(--accent); }
   opacity: 0.55;
 }
 
+
 /* â”€â”€ Result Overlay â”€â”€ */
 .overlay {
   position: fixed;
@@ -478,12 +479,20 @@ const NOTE_COLORS = NOTES.map((_, i) => {
 const OPEN = [4, 9, 2, 7, 11, 4];
 const STRING_NAMES = ['E', 'A', 'D', 'G', 'B', 'e'];
 
+
 const SCALES = {
   'Major':            [0, 2, 4, 5, 7, 9, 11],
   'Natural Minor':    [0, 2, 3, 5, 7, 8, 10],
   'Minor Pentatonic': [0, 3, 5, 7, 10],
   'Major Pentatonic': [0, 2, 4, 7, 9],
   'Blues':            [0, 3, 5, 6, 7, 10],
+};
+
+// Which pentatonic scale each extended scale is built upon
+const PENTA_BASE = {
+  'Natural Minor': 'Minor Pentatonic',
+  'Major':         'Major Pentatonic',
+  'Blues':         'Minor Pentatonic',
 };
 
 // Fret position markers
@@ -522,6 +531,7 @@ function buildScalePositions(root, scaleName) {
       if (notes.has(noteAt(s, f))) pos.add(pk(s, f));
   return pos;
 }
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // BUILD DOM
@@ -617,11 +627,14 @@ function dot(s, f) { return document.getElementById(`d_${s}_${f}`); }
 function setDotClass(d, cls, bg) {
   d.className = 'ndot ' + cls;
   d.style.background = bg || '';
+  d.style.boxShadow  = '';
 }
 
 function styleAll() {
   const { mode, root, scale, game } = S;
   const scalePosSet = buildScalePositions(root, scale);
+  const pentaBase   = PENTA_BASE[scale];
+  const pentaSet    = pentaBase ? buildScaleSet(root, pentaBase) : null;
 
   for (let s = 0; s < 6; s++) {
     for (let f = 0; f <= MAX_FRET; f++) {
@@ -633,8 +646,15 @@ function styleAll() {
       d.style.setProperty('--nc', col);
 
       if (mode === 'browse') {
-        if (inScale) setDotClass(d, 'b-in',  col);
-        else          setDotClass(d, 'b-out');
+        if (inScale) {
+          setDotClass(d, 'b-in', col);
+          const isExtra = pentaSet && !pentaSet.has(ni);
+          d.style.boxShadow = isExtra
+            ? '0 0 0 3.5px rgba(255,210,50,0.95), 0 0 8px var(--nc)'
+            : '0 0 0 3.5px rgba(255,255,255,0.85), 0 0 8px var(--nc)';
+        } else {
+          setDotClass(d, 'b-out');
+        }
 
       } else if (mode === 'playing') {
         if (game.correct.has(key))   setDotClass(d, 'g-ok',    col);
@@ -652,7 +672,9 @@ function styleAll() {
       }
     }
   }
+
 }
+
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // GAME
@@ -761,6 +783,7 @@ function showResult(roundScore) {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // EVENT LISTENERS
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 document.getElementById('key-sel').addEventListener('change', e => {
   S.root = parseInt(e.target.value, 10);
