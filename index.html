@@ -901,14 +901,12 @@ function styleAllNoteHunt() {
       const key = pk(s, f);
       d.style.setProperty('--nc', col);
 
-      if (mode === 'browse') {
-        d.textContent = NOTES[ni];
-        setDotClass(d, 'b-in', col);
-
-      } else if (mode === 'playing') {
-        d.textContent = ''; // note identity must stay hidden while hunting
-        if (game.found.has(key)) setDotClass(d, 'g-ok', col);
-        else                      setDotClass(d, 'g-hidden');
+      if (mode === 'browse' || mode === 'playing') {
+        // Note Hunt is a memorization drill: never reveal identities before
+        // or during a round, only in the post-round review below.
+        d.textContent = '';
+        if (mode === 'playing' && game.found.has(key)) setDotClass(d, 'g-ok', col);
+        else                                            setDotClass(d, 'g-hidden');
 
       } else { // result: reveal the board
         d.textContent = NOTES[ni];
