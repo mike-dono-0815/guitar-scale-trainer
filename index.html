@@ -905,8 +905,11 @@ function styleAllNoteHunt() {
         // Note Hunt is a memorization drill: never reveal identities before
         // or during a round, only in the post-round review below.
         d.textContent = '';
-        if (mode === 'playing' && game.found.has(key)) setDotClass(d, 'g-ok', col);
-        else                                            setDotClass(d, 'g-hidden');
+        // Only light up cells for the CURRENT target — g.found is cumulative
+        // across the whole round (needed for scoring/review), but showing
+        // every previously-found note here would give away future targets.
+        const isCurrentFind = mode === 'playing' && game.positions.has(key) && game.found.has(key);
+        setDotClass(d, isCurrentFind ? 'g-ok' : 'g-hidden', isCurrentFind ? col : undefined);
 
       } else { // result: reveal the board
         d.textContent = NOTES[ni];
