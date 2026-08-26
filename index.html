@@ -183,6 +183,7 @@ select:focus { border-color: var(--accent); }
 .fretboard-outer {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   padding: 18px 24px 18px 20px;
   background: var(--bg);
 }
@@ -1114,6 +1115,23 @@ function pickNoteIdQuestion(g) {
   g.usedKeys.add(key);
   g.current = { s, f, note: noteAt(s, f) };
   g.questionStart = performance.now();
+  scrollCellIntoView(s, f);
+}
+
+// Center the fretboard's horizontal scroll on a cell, e.g. so a highlighted
+// target is never left off-screen on narrow/mobile viewports.
+function scrollCellIntoView(s, f) {
+  const cell      = document.querySelector(`.scell[data-s="${s}"][data-f="${f}"]`);
+  const container = document.querySelector('.fretboard-outer');
+  if (!cell || !container) return;
+
+  const cellRect      = cell.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const cellCenter     = (cellRect.left - containerRect.left) + cellRect.width / 2 + container.scrollLeft;
+  const maxScrollLeft  = Math.max(0, container.scrollWidth - container.clientWidth);
+  const targetLeft     = Math.min(maxScrollLeft, Math.max(0, cellCenter - container.clientWidth / 2));
+
+  container.scrollLeft = targetLeft; // animates via the container's CSS scroll-behavior: smooth
 }
 
 // Average seconds taken to correctly identify a note so far this round.
