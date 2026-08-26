@@ -50,7 +50,9 @@ html, body {
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+  cursor: pointer;
 }
+.header-title:hover { color: var(--accent-h); }
 .header-scores { display: flex; gap: 22px; }
 .score-block { text-align: center; }
 .score-block .lbl {
@@ -501,7 +503,7 @@ select:focus { border-color: var(--accent); }
 
 <!-- Header -->
 <div class="header">
-  <div class="header-title">Guitar Scale Trainer</div>
+  <div class="header-title" id="header-title">Guitar Scale Trainer</div>
   <div class="header-scores">
     <div class="score-block">
       <span class="lbl">Session</span>
@@ -898,16 +900,18 @@ function styleAllNoteHunt() {
       const col = NOTE_COLORS[ni];
       const key = pk(s, f);
       d.style.setProperty('--nc', col);
-      d.textContent = NOTES[ni];
 
       if (mode === 'browse') {
+        d.textContent = NOTES[ni];
         setDotClass(d, 'b-in', col);
 
       } else if (mode === 'playing') {
+        d.textContent = ''; // note identity must stay hidden while hunting
         if (game.found.has(key)) setDotClass(d, 'g-ok', col);
         else                      setDotClass(d, 'g-hidden');
 
-      } else { // result
+      } else { // result: reveal the board
+        d.textContent = NOTES[ni];
         if (game.found.has(key))         setDotClass(d, 'r-found', col);
         else if (game.wrongCells.has(key)) setDotClass(d, 'r-wrong-tap');
         else                               setDotClass(d, 'r-out');
@@ -1378,13 +1382,16 @@ document.getElementById('complete-btn').addEventListener('click', completeRound)
 
 document.getElementById('next-btn').addEventListener('click', startGame);
 
-document.getElementById('change-btn').addEventListener('click', () => {
+function goToMainScreen() {
   document.getElementById('overlay').classList.add('hidden');
   S.mode = 'browse';
   S.game = null;
   styleAll();
   refreshUI();
-});
+}
+
+document.getElementById('change-btn').addEventListener('click', goToMainScreen);
+document.getElementById('header-title').addEventListener('click', goToMainScreen);
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // INIT
