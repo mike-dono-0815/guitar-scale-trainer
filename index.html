@@ -138,7 +138,11 @@ select:focus { border-color: var(--accent); }
 }
 .pill-found { background: #0e2a14; color: #44dd77; border: 1px solid #1e4a24; }
 .pill-wrong { background: #2a0e0e; color: #ff7777; border: 1px solid #4a1e1e; }
+.pill-progress { background: var(--bg2); color: var(--text-dim); border: 1px solid var(--border); }
+.pill-target { color: #fff; font-weight: 700; }
 #complete-btn { margin-left: auto; }
+
+.hide { display: none !important; }
 
 /* â”€â”€ Fretboard â”€â”€ */
 .fretboard-outer {
@@ -321,6 +325,17 @@ select:focus { border-color: var(--accent); }
   opacity: 0.55;
 }
 
+/* Note ID: the single highlighted question cell (identity hidden) */
+.ndot.q-target {
+  background: #2e2e44 !important;
+  box-shadow: 0 0 0 3px #fff, 0 0 16px rgba(255,255,255,0.85);
+  animation: targetPulse 1s ease-in-out infinite;
+}
+@keyframes targetPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.16); }
+}
+
 
 /* â”€â”€ Result Overlay â”€â”€ */
 .overlay {
@@ -361,6 +376,39 @@ select:focus { border-color: var(--accent); }
 .rc-session { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
 .rc-session span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
+
+/* â”€â”€ Note Picker (Note ID mode) â”€â”€ */
+.note-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  justify-content: center;
+}
+.note-picker.hide { display: none; }
+.np-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 0 8px var(--nc);
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.np-btn:hover  { transform: scale(1.08); }
+.np-btn:active { transform: scale(0.94); }
+.np-btn.np-correct {
+  box-shadow: 0 0 0 3px #fff, 0 0 16px #44dd77;
+}
+.np-btn.np-wrong-flash {
+  animation: wrongFlash 0.38s ease forwards;
+}
 
 /* â”€â”€ Color Legend â”€â”€ */
 .legend {
@@ -413,10 +461,18 @@ select:focus { border-color: var(--accent); }
 <!-- Controls -->
 <div class="controls">
   <div class="ctrl-group">
+    <label for="mode-sel">Game Mode</label>
+    <select id="mode-sel">
+      <option value="scale">Scale Practice</option>
+      <option value="notehunt">Note Hunt</option>
+      <option value="noteid">Note ID</option>
+    </select>
+  </div>
+  <div class="ctrl-group" id="key-group">
     <label for="key-sel">Key</label>
     <select id="key-sel"></select>
   </div>
-  <div class="ctrl-group">
+  <div class="ctrl-group" id="scale-group">
     <label for="scale-sel">Scale</label>
     <select id="scale-sel"></select>
   </div>
@@ -425,7 +481,9 @@ select:focus { border-color: var(--accent); }
 
 <!-- Game status bar -->
 <div class="game-bar hidden" id="game-bar">
+  <span class="pill pill-target hide" id="target-pill">Find: <span id="target-note-txt"></span></span>
   <span class="pill pill-found" id="found-pill">Found: 0 / 0</span>
+  <span class="pill pill-progress hide" id="progress-pill">Note 0 / 12</span>
   <span class="pill pill-wrong" id="wrong-pill">0 mistakes</span>
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
@@ -434,6 +492,9 @@ select:focus { border-color: var(--accent); }
 <div class="fretboard-outer">
   <div class="fretboard" id="fretboard"></div>
 </div>
+
+<!-- Note picker (Note ID mode) -->
+<div class="note-picker hide" id="note-picker"></div>
 
 <!-- Legend -->
 <div class="legend" id="legend"></div>
@@ -446,7 +507,7 @@ select:focus { border-color: var(--accent); }
     <div class="rc-scale"  id="rc-scale">E Natural Minor</div>
     <div class="rc-stats">
       <div class="rcs s"><div class="v" id="rc-score">0</div><div class="l">Score</div></div>
-      <div class="rcs f"><div class="v" id="rc-found">0/0</div><div class="l">Found</div></div>
+      <div class="rcs f"><div class="v" id="rc-found">0/0</div><div class="l" id="rc-found-lbl">Found</div></div>
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
@@ -506,6 +567,7 @@ const MAX_FRET = 22;
 
 let S = {
   mode: 'browse',       // 'browse' | 'playing' | 'result'
+  gameType: 'scale',    // 'scale' | 'notehunt' | 'noteid'
   root: 4,              // E
   scale: 'Natural Minor',
   game: null,
@@ -530,6 +592,23 @@ function buildScalePositions(root, scaleName) {
     for (let f = 0; f <= MAX_FRET; f++)
       if (notes.has(noteAt(s, f))) pos.add(pk(s, f));
   return pos;
+}
+
+function notePositions(noteIdx) {
+  const pos = new Set();
+  for (let s = 0; s < 6; s++)
+    for (let f = 0; f <= MAX_FRET; f++)
+      if (noteAt(s, f) === noteIdx) pos.add(pk(s, f));
+  return pos;
+}
+
+function shuffled(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 
@@ -561,6 +640,21 @@ function buildLegend() {
     item.className = 'legend-item';
     item.innerHTML = `<div class="legend-swatch" style="background:${NOTE_COLORS[i]}"></div>${n}`;
     leg.appendChild(item);
+  });
+}
+
+function buildNotePicker() {
+  const wrap = document.getElementById('note-picker');
+  NOTES.forEach((n, i) => {
+    const b = document.createElement('button');
+    b.className = 'np-btn';
+    b.id = `np_${i}`;
+    b.type = 'button';
+    b.textContent = n;
+    b.style.setProperty('--nc', NOTE_COLORS[i]);
+    b.style.background = NOTE_COLORS[i];
+    b.addEventListener('click', () => onNoteGuess(i));
+    wrap.appendChild(b);
   });
 }
 
@@ -610,7 +704,6 @@ function buildFretboard() {
       dot.className = 'ndot';
       dot.id = `d_${s}_${f}`;
       dot.style.setProperty('--nc', NOTE_COLORS[ni]);
-      dot.textContent = NOTES[ni];
       cell.appendChild(dot);
 
       cell.addEventListener('click', () => onTap(s, f));
@@ -631,6 +724,12 @@ function setDotClass(d, cls, bg) {
 }
 
 function styleAll() {
+  if (S.gameType === 'notehunt')     styleAllNoteHunt();
+  else if (S.gameType === 'noteid')  styleAllNoteId();
+  else                                styleAllScale();
+}
+
+function styleAllScale() {
   const { mode, root, scale, game } = S;
   const scalePosSet = buildScalePositions(root, scale);
   const pentaBase   = PENTA_BASE[scale];
@@ -644,6 +743,7 @@ function styleAll() {
       const key = pk(s, f);
       const inScale = scalePosSet.has(key);
       d.style.setProperty('--nc', col);
+      d.textContent = NOTES[ni];
 
       if (mode === 'browse') {
         if (inScale) {
@@ -672,7 +772,57 @@ function styleAll() {
       }
     }
   }
+}
 
+function styleAllNoteHunt() {
+  const { mode, game } = S;
+
+  for (let s = 0; s < 6; s++) {
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const d   = dot(s, f);
+      const ni  = noteAt(s, f);
+      const col = NOTE_COLORS[ni];
+      const key = pk(s, f);
+      d.style.setProperty('--nc', col);
+      d.textContent = NOTES[ni];
+
+      if (mode === 'browse') {
+        setDotClass(d, 'b-in', col);
+
+      } else if (mode === 'playing') {
+        if (game.found.has(key)) setDotClass(d, 'g-ok', col);
+        else                      setDotClass(d, 'g-hidden');
+
+      } else { // result
+        if (game.found.has(key))         setDotClass(d, 'r-found', col);
+        else if (game.wrongCells.has(key)) setDotClass(d, 'r-wrong-tap');
+        else                               setDotClass(d, 'r-out');
+      }
+    }
+  }
+}
+
+function styleAllNoteId() {
+  const { mode, game } = S;
+  const targetKey = (mode === 'playing' && game.current) ? pk(game.current.s, game.current.f) : null;
+
+  for (let s = 0; s < 6; s++) {
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const d   = dot(s, f);
+      const ni  = noteAt(s, f);
+      const col = NOTE_COLORS[ni];
+      const key = pk(s, f);
+      d.style.setProperty('--nc', col);
+
+      if (mode === 'playing') {
+        d.textContent = ''; // note identity must stay hidden while guessing
+        setDotClass(d, key === targetKey ? 'q-target' : 'g-hidden');
+      } else { // browse or result: reveal the board
+        d.textContent = NOTES[ni];
+        setDotClass(d, 'b-in', col);
+      }
+    }
+  }
 }
 
 
@@ -681,6 +831,28 @@ function styleAll() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGame() {
+  if (S.gameType === 'notehunt')    startNoteHunt();
+  else if (S.gameType === 'noteid') startNoteId();
+  else                                startScaleGame();
+}
+
+function onTap(s, f) {
+  if (S.mode !== 'playing') return;
+  if (S.gameType === 'notehunt') onTapNoteHunt(s, f);
+  else if (S.gameType === 'noteid') return; // answered via the note picker, not the board
+  else                            onTapScale(s, f);
+}
+
+function completeRound() {
+  if (S.mode !== 'playing') return;
+  if (S.gameType === 'notehunt')    endNoteHuntRound();
+  else if (S.gameType === 'noteid') endNoteIdRound();
+  else                                endScaleRound();
+}
+
+// â”€â”€ Scale Practice mode â”€â”€
+
+function startScaleGame() {
   const scalePos = buildScalePositions(S.root, S.scale);
   S.game = { scalePos, correct: new Set(), wrongPos: new Set(), wrongCount: 0 };
   S.mode = 'playing';
@@ -689,8 +861,7 @@ function startGame() {
   refreshUI();
 }
 
-function onTap(s, f) {
-  if (S.mode !== 'playing') return;
+function onTapScale(s, f) {
   const g   = S.game;
   const key = pk(s, f);
 
@@ -703,7 +874,7 @@ function onTap(s, f) {
     d.style.setProperty('--nc', col);
     setDotClass(d, 'g-ok', col);
 
-    if (g.correct.size === g.scalePos.size) { endRound(); return; }
+    if (g.correct.size === g.scalePos.size) { endScaleRound(); return; }
   } else {
     g.wrongCount++;
     g.wrongPos.add(key);
@@ -718,14 +889,171 @@ function onTap(s, f) {
   refreshGameBar();
 }
 
-function endRound() {
+function endScaleRound() {
   const g = S.game;
   const roundScore = Math.max(0, 100 - g.wrongCount * 10);
   S.session.score  += roundScore;
   S.session.rounds += 1;
   S.mode = 'result';
   styleAll();
-  showResult(roundScore);
+  showScaleResult(roundScore);
+  refreshUI();
+}
+
+// â”€â”€ Note Hunt mode â”€â”€
+
+function loadNoteHuntTarget() {
+  const g = S.game;
+  g.target    = g.order[g.idx];
+  g.positions = notePositions(g.target);
+}
+
+function startNoteHunt() {
+  S.game = {
+    order: shuffled(NOTES.map((_, i) => i)),
+    idx: 0,
+    target: 0,
+    positions: null,
+    found: new Set(),
+    wrongCells: new Set(),
+    wrongCount: 0,
+    notesDone: 0,
+  };
+  loadNoteHuntTarget();
+  S.mode = 'playing';
+  document.getElementById('overlay').classList.add('hidden');
+  styleAll();
+  refreshUI();
+}
+
+function onTapNoteHunt(s, f) {
+  const g   = S.game;
+  const key = pk(s, f);
+
+  if (g.found.has(key)) return; // already correctly tapped
+
+  if (g.positions.has(key)) {
+    g.found.add(key);
+    const d   = dot(s, f);
+    const col = NOTE_COLORS[g.target];
+    d.style.setProperty('--nc', col);
+    setDotClass(d, 'g-ok', col);
+    refreshGameBar();
+
+    const noteComplete = [...g.positions].every(k => g.found.has(k));
+    if (noteComplete) {
+      g.notesDone++;
+      setTimeout(() => {
+        if (S.game !== g || S.mode !== 'playing') return; // round changed meanwhile
+        if (g.notesDone >= g.order.length) {
+          endNoteHuntRound();
+        } else {
+          g.idx++;
+          loadNoteHuntTarget();
+          styleAll();
+          refreshGameBar();
+        }
+      }, 350);
+    }
+  } else {
+    g.wrongCount++;
+    g.wrongCells.add(key);
+    const d = dot(s, f);
+    d.className = 'ndot g-hidden g-wrong-flash';
+    d.style.background = '';
+    setTimeout(() => {
+      if (d.classList.contains('g-wrong-flash')) d.classList.remove('g-wrong-flash');
+    }, 400);
+    refreshGameBar();
+  }
+}
+
+function endNoteHuntRound() {
+  const g = S.game;
+  const roundScore = Math.max(0, g.found.size * 10 - g.wrongCount * 5);
+  S.session.score  += roundScore;
+  S.session.rounds += 1;
+  S.mode = 'result';
+  styleAll();
+  showNoteHuntResult(roundScore);
+  refreshUI();
+}
+
+// â”€â”€ Note ID mode â”€â”€
+
+const NOTE_ID_QUESTIONS = 15;
+const NOTE_ID_CELL_COUNT = 6 * (MAX_FRET + 1);
+
+function pickNoteIdQuestion(g) {
+  let s, f, key;
+  do {
+    s = Math.floor(Math.random() * 6);
+    f = Math.floor(Math.random() * (MAX_FRET + 1));
+    key = pk(s, f);
+  } while (g.usedKeys.has(key) && g.usedKeys.size < NOTE_ID_CELL_COUNT);
+  g.usedKeys.add(key);
+  g.current = { s, f, note: noteAt(s, f) };
+}
+
+function resetNotePicker() {
+  document.querySelectorAll('.np-btn').forEach(b => b.classList.remove('np-correct', 'np-wrong-flash'));
+}
+
+function startNoteId() {
+  S.game = {
+    total: NOTE_ID_QUESTIONS,
+    asked: 1,
+    correct: 0,
+    wrongCount: 0,
+    usedKeys: new Set(),
+    current: null,
+  };
+  pickNoteIdQuestion(S.game);
+  S.mode = 'playing';
+  document.getElementById('overlay').classList.add('hidden');
+  resetNotePicker();
+  styleAll();
+  refreshUI();
+}
+
+function onNoteGuess(i) {
+  if (S.mode !== 'playing' || S.gameType !== 'noteid') return;
+  const g   = S.game;
+  const btn = document.getElementById(`np_${i}`);
+
+  if (i === g.current.note) {
+    g.correct++;
+    btn.classList.add('np-correct');
+    refreshGameBar();
+
+    setTimeout(() => {
+      if (S.game !== g || S.mode !== 'playing') return; // round changed meanwhile
+      if (g.asked >= g.total) {
+        endNoteIdRound();
+      } else {
+        g.asked++;
+        pickNoteIdQuestion(g);
+        resetNotePicker();
+        styleAll();
+        refreshGameBar();
+      }
+    }, 400);
+  } else {
+    g.wrongCount++;
+    btn.classList.add('np-wrong-flash');
+    setTimeout(() => btn.classList.remove('np-wrong-flash'), 400);
+    refreshGameBar();
+  }
+}
+
+function endNoteIdRound() {
+  const g = S.game;
+  const roundScore = Math.max(0, g.correct * 10 - g.wrongCount * 5);
+  S.session.score  += roundScore;
+  S.session.rounds += 1;
+  S.mode = 'result';
+  styleAll();
+  showNoteIdResult(roundScore);
   refreshUI();
 }
 
@@ -734,12 +1062,25 @@ function endRound() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function refreshUI() {
-  const { mode, session } = S;
+  const { mode, gameType, session } = S;
   document.getElementById('session-val').textContent = session.score;
   document.getElementById('rounds-val').textContent  = session.rounds;
 
-  const startBtn = document.getElementById('start-btn');
-  const bar      = document.getElementById('game-bar');
+  const startBtn    = document.getElementById('start-btn');
+  const bar         = document.getElementById('game-bar');
+  const modeSel     = document.getElementById('mode-sel');
+  const keyGroup    = document.getElementById('key-group');
+  const scaleGroup  = document.getElementById('scale-group');
+  const targetPill  = document.getElementById('target-pill');
+  const progPill    = document.getElementById('progress-pill');
+  const notePicker  = document.getElementById('note-picker');
+
+  modeSel.disabled = (mode === 'playing');
+  keyGroup.classList.toggle('hide', gameType !== 'scale');
+  scaleGroup.classList.toggle('hide', gameType !== 'scale');
+  targetPill.classList.toggle('hide', gameType !== 'notehunt');
+  progPill.classList.toggle('hide', gameType === 'scale');
+  notePicker.classList.toggle('hide', !(gameType === 'noteid' && mode === 'playing'));
 
   if (mode === 'playing') {
     startBtn.textContent = '\u21BA Restart';
@@ -753,14 +1094,32 @@ function refreshUI() {
 
 function refreshGameBar() {
   const g = S.game;
-  document.getElementById('found-pill').textContent =
-    `Found: ${g.correct.size} / ${g.scalePos.size}`;
   const w = g.wrongCount;
   document.getElementById('wrong-pill').textContent =
     `${w} mistake${w !== 1 ? 's' : ''}`;
+
+  if (S.gameType === 'notehunt') {
+    const swatch = NOTE_COLORS[g.target];
+    const targetTxt = document.getElementById('target-note-txt');
+    targetTxt.textContent = NOTES[g.target];
+    document.getElementById('target-pill').style.background = swatch;
+    const foundForTarget = [...g.positions].filter(k => g.found.has(k)).length;
+    document.getElementById('found-pill').textContent =
+      `Found: ${foundForTarget} / ${g.positions.size}`;
+    document.getElementById('progress-pill').textContent =
+      `Note ${g.idx + 1} / ${g.order.length}`;
+  } else if (S.gameType === 'noteid') {
+    document.getElementById('found-pill').textContent =
+      `Correct: ${g.correct} / ${g.total}`;
+    document.getElementById('progress-pill').textContent =
+      `Question ${g.asked} / ${g.total}`;
+  } else {
+    document.getElementById('found-pill').textContent =
+      `Found: ${g.correct.size} / ${g.scalePos.size}`;
+  }
 }
 
-function showResult(roundScore) {
+function showScaleResult(roundScore) {
   const g     = S.game;
   const total = g.scalePos.size;
   const found = g.correct.size;
@@ -774,8 +1133,45 @@ function showResult(roundScore) {
   document.getElementById('rc-title').textContent = headline;
   document.getElementById('rc-scale').textContent = scaleLbl;
   document.getElementById('rc-score').textContent = roundScore;
+  document.getElementById('rc-found-lbl').textContent = 'Found';
   document.getElementById('rc-found').textContent = `${found}/${total}`;
   document.getElementById('rc-wrong').textContent = wrong;
+  document.getElementById('rc-session').textContent = S.session.score;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function showNoteHuntResult(roundScore) {
+  const g     = S.game;
+  const wrong = g.wrongCount;
+
+  const emoji    = roundScore >= 100 ? '&#127881;' : roundScore >= 50 ? '&#128077;' : '&#128170;';
+  const headline = roundScore >= 100 ? 'Excellent!' : roundScore >= 50 ? 'Good job!' : 'Keep practicing!';
+
+  document.getElementById('rc-emoji').innerHTML  = emoji;
+  document.getElementById('rc-title').textContent = headline;
+  document.getElementById('rc-scale').textContent = 'Note Hunt';
+  document.getElementById('rc-score').textContent = roundScore;
+  document.getElementById('rc-found-lbl').textContent = 'Notes';
+  document.getElementById('rc-found').textContent = `${g.notesDone}/${g.order.length}`;
+  document.getElementById('rc-wrong').textContent = wrong;
+  document.getElementById('rc-session').textContent = S.session.score;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+function showNoteIdResult(roundScore) {
+  const g   = S.game;
+  const pct = g.correct / g.total;
+
+  const emoji    = pct >= 0.9 ? '&#127881;' : pct >= 0.6 ? '&#128077;' : '&#128170;';
+  const headline = pct >= 0.9 ? 'Excellent!' : pct >= 0.6 ? 'Good job!' : 'Keep practicing!';
+
+  document.getElementById('rc-emoji').innerHTML  = emoji;
+  document.getElementById('rc-title').textContent = headline;
+  document.getElementById('rc-scale').textContent = 'Note ID';
+  document.getElementById('rc-score').textContent = roundScore;
+  document.getElementById('rc-found-lbl').textContent = 'Correct';
+  document.getElementById('rc-found').textContent = `${g.correct}/${g.total}`;
+  document.getElementById('rc-wrong').textContent = g.wrongCount;
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('overlay').classList.remove('hidden');
 }
@@ -784,6 +1180,15 @@ function showResult(roundScore) {
 // EVENT LISTENERS
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+
+document.getElementById('mode-sel').addEventListener('change', e => {
+  if (S.mode === 'playing') return; // locked during an active round
+  S.gameType = e.target.value;
+  S.mode = 'browse';
+  S.game = null;
+  styleAll();
+  refreshUI();
+});
 
 document.getElementById('key-sel').addEventListener('change', e => {
   S.root = parseInt(e.target.value, 10);
@@ -797,9 +1202,7 @@ document.getElementById('scale-sel').addEventListener('change', e => {
 
 document.getElementById('start-btn').addEventListener('click', startGame);
 
-document.getElementById('complete-btn').addEventListener('click', () => {
-  if (S.mode === 'playing') endRound();
-});
+document.getElementById('complete-btn').addEventListener('click', completeRound);
 
 document.getElementById('next-btn').addEventListener('click', startGame);
 
@@ -818,6 +1221,7 @@ document.getElementById('change-btn').addEventListener('click', () => {
 buildSelects();
 buildFretboard();
 buildLegend();
+buildNotePicker();
 styleAll();
 refreshUI();
 </script>
