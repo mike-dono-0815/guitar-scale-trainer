@@ -210,6 +210,9 @@ select:focus { border-color: var(--accent); }
   justify-content: center;
   border-left: 2px solid #7a6030;
   cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .scell.open-pos {
   border-left: none;
@@ -380,6 +383,21 @@ select:focus { border-color: var(--accent); }
 .rc-time span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
 
+/* â”€â”€ Press-and-hold peek tooltip â”€â”€ */
+.note-peek {
+  position: fixed;
+  z-index: 500;
+  pointer-events: none;
+  transform: translate(-50%, -130%);
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,255,255,0.3);
+}
+
 /* â”€â”€ Note Picker (Note ID mode) â”€â”€ */
 .note-picker {
   display: flex;
@@ -499,6 +517,9 @@ select:focus { border-color: var(--accent); }
 
 <!-- Note picker (Note ID mode) -->
 <div class="note-picker hide" id="note-picker"></div>
+
+<!-- Press-and-hold peek tooltip -->
+<div class="note-peek hide" id="note-peek"></div>
 
 <!-- Legend -->
 <div class="legend" id="legend"></div>
@@ -711,9 +732,56 @@ function buildFretboard() {
       dot.style.setProperty('--nc', NOTE_COLORS[ni]);
       cell.appendChild(dot);
 
-      cell.addEventListener('click', () => onTap(s, f));
+      attachPeekHold(cell, s, f);
     }
   }
+}
+
+// â”€â”€ Press-and-hold to peek at the underlying note â”€â”€
+
+const PEEK_HOLD_MS = 350;
+
+function showNotePeek(cellEl, s, f) {
+  const ni  = noteAt(s, f);
+  const tip = document.getElementById('note-peek');
+  const rect = cellEl.getBoundingClientRect();
+  tip.textContent = NOTES[ni];
+  tip.style.background = NOTE_COLORS[ni];
+  tip.style.left = `${rect.left + rect.width / 2}px`;
+  tip.style.top  = `${rect.top}px`;
+  tip.classList.remove('hide');
+}
+
+function hideNotePeek() {
+  document.getElementById('note-peek').classList.add('hide');
+}
+
+function attachPeekHold(cell, s, f) {
+  let holdTimer = null;
+  let holdFired = false;
+
+  cell.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    holdFired = false;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      holdFired = true;
+      showNotePeek(cell, s, f);
+    }, PEEK_HOLD_MS);
+  });
+
+  const endHold = () => {
+    clearTimeout(holdTimer);
+    if (holdFired) hideNotePeek();
+  };
+  cell.addEventListener('pointerup', endHold);
+  cell.addEventListener('pointerleave', endHold);
+  cell.addEventListener('pointercancel', endHold);
+
+  cell.addEventListener('click', () => {
+    if (holdFired) { holdFired = false; return; } // a hold-peek, not a tap
+    onTap(s, f);
+  });
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
