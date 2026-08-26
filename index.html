@@ -140,6 +140,7 @@ select:focus { border-color: var(--accent); }
 .pill-wrong { background: #2a0e0e; color: #ff7777; border: 1px solid #4a1e1e; }
 .pill-progress { background: var(--bg2); color: var(--text-dim); border: 1px solid var(--border); }
 .pill-target { color: #fff; font-weight: 700; }
+.pill-time { background: var(--bg2); color: var(--gold); border: 1px solid var(--border); }
 #complete-btn { margin-left: auto; }
 
 .hide { display: none !important; }
@@ -375,6 +376,8 @@ select:focus { border-color: var(--accent); }
 .rcs.w .v { color: var(--red); }
 .rc-session { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
 .rc-session span { color: var(--gold); font-weight: 700; }
+.rc-time { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
+.rc-time span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
 
 /* â”€â”€ Note Picker (Note ID mode) â”€â”€ */
@@ -485,6 +488,7 @@ select:focus { border-color: var(--accent); }
   <span class="pill pill-found" id="found-pill">Found: 0 / 0</span>
   <span class="pill pill-progress hide" id="progress-pill">Note 0 / 12</span>
   <span class="pill pill-wrong" id="wrong-pill">0 mistakes</span>
+  <span class="pill pill-time hide" id="time-pill">Avg: —</span>
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
 
@@ -511,6 +515,7 @@ select:focus { border-color: var(--accent); }
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
+    <div class="rc-time hide" id="rc-time">Avg time to identify: <span id="rc-time-val">0.0s</span></div>
     <div class="rc-btns">
       <button class="btn btn-primary"   id="next-btn">&#9654; Next Round</button>
       <button class="btn btn-secondary" id="change-btn">Change Settings</button>
@@ -993,6 +998,13 @@ function pickNoteIdQuestion(g) {
   } while (g.usedKeys.has(key) && g.usedKeys.size < NOTE_ID_CELL_COUNT);
   g.usedKeys.add(key);
   g.current = { s, f, note: noteAt(s, f) };
+  g.questionStart = performance.now();
+}
+
+// Average seconds taken to correctly identify a note so far this round.
+function noteIdAvgTime(g) {
+  if (!g.times.length) return null;
+  return g.times.reduce((a, b) => a + b, 0) / g.times.length;
 }
 
 function resetNotePicker() {
@@ -1007,6 +1019,7 @@ function startNoteId() {
     wrongCount: 0,
     usedKeys: new Set(),
     current: null,
+    times: [],
   };
   pickNoteIdQuestion(S.game);
   S.mode = 'playing';
@@ -1023,6 +1036,7 @@ function onNoteGuess(i) {
 
   if (i === g.current.note) {
     g.correct++;
+    g.times.push((performance.now() - g.questionStart) / 1000);
     btn.classList.add('np-correct');
     refreshGameBar();
 
@@ -1073,6 +1087,7 @@ function refreshUI() {
   const scaleGroup  = document.getElementById('scale-group');
   const targetPill  = document.getElementById('target-pill');
   const progPill    = document.getElementById('progress-pill');
+  const timePill    = document.getElementById('time-pill');
   const notePicker  = document.getElementById('note-picker');
 
   modeSel.disabled = (mode === 'playing');
@@ -1080,6 +1095,7 @@ function refreshUI() {
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
   targetPill.classList.toggle('hide', gameType !== 'notehunt');
   progPill.classList.toggle('hide', gameType === 'scale');
+  timePill.classList.toggle('hide', gameType !== 'noteid');
   notePicker.classList.toggle('hide', !(gameType === 'noteid' && mode === 'playing'));
 
   if (mode === 'playing') {
@@ -1113,6 +1129,9 @@ function refreshGameBar() {
       `Correct: ${g.correct} / ${g.total}`;
     document.getElementById('progress-pill').textContent =
       `Question ${g.asked} / ${g.total}`;
+    const avg = noteIdAvgTime(g);
+    document.getElementById('time-pill').textContent =
+      avg === null ? 'Avg: —' : `Avg: ${avg.toFixed(1)}s`;
   } else {
     document.getElementById('found-pill').textContent =
       `Found: ${g.correct.size} / ${g.scalePos.size}`;
@@ -1137,6 +1156,7 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-found').textContent = `${found}/${total}`;
   document.getElementById('rc-wrong').textContent = wrong;
   document.getElementById('rc-session').textContent = S.session.score;
+  document.getElementById('rc-time').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -1155,6 +1175,7 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-found').textContent = `${g.notesDone}/${g.order.length}`;
   document.getElementById('rc-wrong').textContent = wrong;
   document.getElementById('rc-session').textContent = S.session.score;
+  document.getElementById('rc-time').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -1173,6 +1194,16 @@ function showNoteIdResult(roundScore) {
   document.getElementById('rc-found').textContent = `${g.correct}/${g.total}`;
   document.getElementById('rc-wrong').textContent = g.wrongCount;
   document.getElementById('rc-session').textContent = S.session.score;
+
+  const avg = noteIdAvgTime(g);
+  const rcTime = document.getElementById('rc-time');
+  if (avg === null) {
+    rcTime.classList.add('hide');
+  } else {
+    rcTime.classList.remove('hide');
+    document.getElementById('rc-time-val').textContent = `${avg.toFixed(1)}s`;
+  }
+
   document.getElementById('overlay').classList.remove('hidden');
 }
 
