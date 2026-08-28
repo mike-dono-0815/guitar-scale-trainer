@@ -580,6 +580,7 @@ select:focus { border-color: var(--accent); }
     </div>
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
     <div class="rc-time hide" id="rc-time">Avg time to identify: <span id="rc-time-val">0.0s</span></div>
+    <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
     <div class="rc-btns">
       <button class="btn btn-primary"   id="next-btn">&#9654; Next Round</button>
       <button class="btn btn-secondary" id="change-btn">Change Settings</button>
@@ -1108,7 +1109,7 @@ function endNoteHuntRound() {
 
 // â”€â”€ Note ID mode â”€â”€
 
-const NOTE_ID_QUESTIONS = 15;
+const NOTE_ID_QUESTIONS = 30;
 const NOTE_ID_CELL_COUNT = 6 * (MAX_FRET + 1);
 
 function pickNoteIdQuestion(g) {
@@ -1144,6 +1145,22 @@ function scrollCellIntoView(s, f) {
 function noteIdAvgTime(g) {
   if (!g.times.length) return null;
   return g.times.reduce((a, b) => a + b, 0) / g.times.length;
+}
+
+// Speed bonus for a single correct answer, based on how fast it was:
+// full NOTE_ID_SPEED_BONUS_MAX at/under FAST_S, tapering linearly to 0 at/over SLOW_S.
+const NOTE_ID_SPEED_BONUS_MAX = 10;
+const NOTE_ID_SPEED_FAST_S = 1.5;
+const NOTE_ID_SPEED_SLOW_S = 6.5;
+function noteIdSpeedBonus1(t) {
+  const span = NOTE_ID_SPEED_SLOW_S - NOTE_ID_SPEED_FAST_S;
+  const frac = (NOTE_ID_SPEED_SLOW_S - t) / span;
+  return Math.round(NOTE_ID_SPEED_BONUS_MAX * Math.max(0, Math.min(1, frac)));
+}
+
+// Total speed bonus across every correct answer this round.
+function noteIdSpeedBonus(g) {
+  return g.times.reduce((sum, t) => sum + noteIdSpeedBonus1(t), 0);
 }
 
 function resetNotePicker() {
@@ -1201,12 +1218,13 @@ function onNoteGuess(i) {
 
 function endNoteIdRound() {
   const g = S.game;
-  const roundScore = Math.max(0, g.correct * 10 - g.wrongCount * 5);
+  const speedBonus = noteIdSpeedBonus(g);
+  const roundScore = Math.max(0, g.correct * 10 + speedBonus - g.wrongCount * 5);
   S.session.score  += roundScore;
   S.session.rounds += 1;
   S.mode = 'result';
   styleAll();
-  showNoteIdResult(roundScore);
+  showNoteIdResult(roundScore, speedBonus);
   refreshUI();
 }
 
@@ -1248,7 +1266,31 @@ function refreshUI() {
     startBtn.innerHTML = '&#9654; Start Game';
     bar.classList.add('hidden');
   }
+
+  alignNotePicker();
 }
+
+// Center the Note ID picker strip under the fretboard rather than under the
+// whole window. On desktop the full board is left-aligned inside a wider
+// viewport, so a window-centered strip drifts right of the board it belongs to.
+function alignNotePicker() {
+  const picker = document.getElementById('note-picker');
+  const outer  = document.querySelector('.fretboard-outer');
+  const board  = document.getElementById('fretboard');
+  picker.style.maxWidth = '';
+  picker.style.marginLeft = '';
+  if (picker.classList.contains('hide')) return;
+
+  // Only realign when the entire board is on screen; if it scrolls, the strip's
+  // default full-width centering already matches the visible board.
+  if (board.scrollWidth <= outer.clientWidth) {
+    const offset = board.getBoundingClientRect().left - outer.getBoundingClientRect().left;
+    picker.style.maxWidth   = board.getBoundingClientRect().width + 'px';
+    picker.style.marginLeft = offset + 'px';
+  }
+}
+
+window.addEventListener('resize', alignNotePicker);
 
 function refreshGameBar() {
   const g = S.game;
@@ -1299,6 +1341,7 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-wrong').textContent = wrong;
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-time').classList.add('hide');
+  document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -1318,10 +1361,11 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-wrong').textContent = wrong;
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-time').classList.add('hide');
+  document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
-function showNoteIdResult(roundScore) {
+function showNoteIdResult(roundScore, speedBonus) {
   const g   = S.game;
   const pct = g.correct / g.total;
 
@@ -1344,6 +1388,14 @@ function showNoteIdResult(roundScore) {
   } else {
     rcTime.classList.remove('hide');
     document.getElementById('rc-time-val').textContent = `${avg.toFixed(1)}s`;
+  }
+
+  const rcSpeed = document.getElementById('rc-speed');
+  if (speedBonus > 0) {
+    rcSpeed.classList.remove('hide');
+    document.getElementById('rc-speed-val').textContent = `+${speedBonus}`;
+  } else {
+    rcSpeed.classList.add('hide');
   }
 
   document.getElementById('overlay').classList.remove('hidden');
