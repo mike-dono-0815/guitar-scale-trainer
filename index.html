@@ -400,6 +400,8 @@ select:focus { border-color: var(--accent); }
   max-width: 360px;
   width: 100%;
   text-align: center;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 .rc-emoji  { font-size: 2.6rem; margin-bottom: 6px; }
 .rc-title  { font-size: 1.4rem; font-weight: 700; margin-bottom: 3px; }
@@ -419,7 +421,45 @@ select:focus { border-color: var(--accent); }
 .rc-session span { color: var(--gold); font-weight: 700; }
 .rc-time { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
 .rc-time span { color: var(--gold); font-weight: 700; }
+.rc-rank { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 6px; }
+.rc-rank span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
+
+/* ── Note ID Leaderboard ── */
+.lb-card { max-width: 470px; text-align: left; }
+.lb-title { font-size: 1.3rem; font-weight: 700; text-align: center; margin-bottom: 2px; }
+.lb-sub   { font-size: 0.72rem; color: var(--text-dim); text-align: center; margin-bottom: 16px; }
+.lb-table-wrap { overflow-x: auto; }
+.lb-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.lb-table.hide { display: none; }
+.lb-table th {
+  font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-dim); font-weight: 600; text-align: left; padding: 3px 8px 6px;
+}
+.lb-table td { padding: 6px 8px; border-top: 1px solid var(--border); white-space: nowrap; }
+.lb-rank  { text-align: center; width: 2em; font-weight: 700; color: var(--text-dim); }
+.lb-score { color: var(--gold); font-weight: 700; }
+.lb-wrong { color: var(--red); }
+.lb-date  { color: var(--text-dim); font-size: 0.72rem; }
+.lb-table tr.lb-you td { background: rgba(255,204,68,0.12); }
+.lb-empty { text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 26px 0; }
+.lb-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 14px 0 16px; font-size: 0.7rem; color: var(--text-dim);
+}
+.lb-clear {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-size: 0.7rem; text-decoration: underline; padding: 2px 4px;
+}
+.lb-clear:hover { color: var(--red); }
+.lb-clear.lb-clear-armed { color: var(--red); font-weight: 700; }
+.lb-link {
+  display: block; width: 100%; background: none; border: none;
+  color: var(--accent-h); cursor: pointer; font-size: 0.8rem;
+  padding: 2px 0 12px; text-align: center;
+}
+.lb-link:hover { text-decoration: underline; }
+#leaderboard-btn { margin-left: auto; }
 
 /* â”€â”€ Press-and-hold peek tooltip â”€â”€ */
 .note-peek {
@@ -536,6 +576,7 @@ select:focus { border-color: var(--accent); }
     <select id="scale-sel"></select>
   </div>
   <button class="btn btn-primary" id="start-btn">&#9654; Start Game</button>
+  <button class="btn btn-secondary" id="leaderboard-btn">&#127942; Leaderboard</button>
 </div>
 
 <!-- Game status bar -->
@@ -581,9 +622,30 @@ select:focus { border-color: var(--accent); }
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
     <div class="rc-time hide" id="rc-time">Avg time to identify: <span id="rc-time-val">0.0s</span></div>
     <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
+    <div class="rc-rank hide" id="rc-rank">Leaderboard: <span id="rc-rank-val">—</span></div>
+    <button class="lb-link hide" id="rc-lb-btn" type="button">View full leaderboard &rarr;</button>
     <div class="rc-btns">
       <button class="btn btn-primary"   id="next-btn">&#9654; Next Round</button>
       <button class="btn btn-secondary" id="change-btn">Change Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- Leaderboard overlay (Note ID) -->
+<div class="overlay hidden" id="lb-overlay">
+  <div class="result-card lb-card">
+    <div class="lb-title">&#127942; Note ID Leaderboard</div>
+    <div class="lb-sub">Top 10 rounds, ranked by score</div>
+    <div class="lb-table-wrap">
+      <table class="lb-table" id="lb-table"></table>
+    </div>
+    <div class="lb-empty hide" id="lb-empty">No Note ID rounds recorded yet.</div>
+    <div class="lb-foot">
+      <span id="lb-count"></span>
+      <button class="lb-clear" id="lb-clear" type="button">Clear history</button>
+    </div>
+    <div class="rc-btns">
+      <button class="btn btn-primary" id="lb-close">Close</button>
     </div>
   </div>
 </div>
@@ -1223,8 +1285,21 @@ function endNoteIdRound() {
   S.session.score  += roundScore;
   S.session.rounds += 1;
   S.mode = 'result';
+
+  const entry = {
+    ts: Date.now(),
+    score: roundScore,
+    correct: g.correct,
+    total: g.total,
+    wrong: g.wrongCount,
+    avgTime: noteIdAvgTime(g),
+    speedBonus,
+  };
+  S.lastRoundTs = entry.ts;
+  const standing = lbRecord(entry);
+
   styleAll();
-  showNoteIdResult(roundScore, speedBonus);
+  showNoteIdResult(roundScore, speedBonus, standing);
   refreshUI();
 }
 
@@ -1342,6 +1417,8 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-time').classList.add('hide');
   document.getElementById('rc-speed').classList.add('hide');
+  document.getElementById('rc-rank').classList.add('hide');
+  document.getElementById('rc-lb-btn').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -1362,10 +1439,12 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-time').classList.add('hide');
   document.getElementById('rc-speed').classList.add('hide');
+  document.getElementById('rc-rank').classList.add('hide');
+  document.getElementById('rc-lb-btn').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
 
-function showNoteIdResult(roundScore, speedBonus) {
+function showNoteIdResult(roundScore, speedBonus, standing) {
   const g   = S.game;
   const pct = g.correct / g.total;
 
@@ -1398,7 +1477,113 @@ function showNoteIdResult(roundScore, speedBonus) {
     rcSpeed.classList.add('hide');
   }
 
+  const rcRank = document.getElementById('rc-rank');
+  document.getElementById('rc-lb-btn').classList.remove('hide');
+  if (standing) {
+    const { rank, total } = standing;
+    let txt;
+    if (rank === 1)       txt = `\u{1F3C6} New #1 of ${total}!`;
+    else if (rank <= 10)  txt = `Top 10 — #${rank} of ${total}`;
+    else                  txt = `#${rank} of ${total}`;
+    document.getElementById('rc-rank-val').textContent = txt;
+    rcRank.classList.remove('hide');
+  } else {
+    rcRank.classList.add('hide');
+  }
+
   document.getElementById('overlay').classList.remove('hidden');
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// NOTE ID LEADERBOARD  (localStorage-backed round history)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const LB_KEY = 'guitar-scale-trainer:noteid-history';
+const LB_MAX = 200; // cap stored rows so the entry never grows unbounded
+
+function lbLoad() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LB_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return []; // storage disabled / corrupt — leaderboard is best-effort
+  }
+}
+
+function lbStore(list) {
+  try { localStorage.setItem(LB_KEY, JSON.stringify(list.slice(0, LB_MAX))); }
+  catch (e) { /* ignore: private mode, quota, etc. */ }
+}
+
+// Ranking order: higher score, then faster avg time, then more correct, then earlier.
+function lbCompare(a, b) {
+  if (b.score !== a.score) return b.score - a.score;
+  const at = a.avgTime == null ? Infinity : a.avgTime;
+  const bt = b.avgTime == null ? Infinity : b.avgTime;
+  if (at !== bt) return at - bt;
+  if (b.correct !== a.correct) return b.correct - a.correct;
+  return a.ts - b.ts;
+}
+
+// Persist a finished round; returns { rank, total } of that round in full history.
+function lbRecord(entry) {
+  const ranked = [...lbLoad(), entry].sort(lbCompare);
+  const rank = ranked.indexOf(entry) + 1;
+  lbStore(ranked);
+  return { rank, total: ranked.length };
+}
+
+function lbFmtDate(ts) {
+  try {
+    return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return '';
+  }
+}
+
+function renderLeaderboard() {
+  const list  = lbLoad().sort(lbCompare);
+  const table = document.getElementById('lb-table');
+  const empty = document.getElementById('lb-empty');
+  const count = document.getElementById('lb-count');
+
+  empty.classList.toggle('hide', list.length > 0);
+  table.classList.toggle('hide', list.length === 0);
+  count.textContent = list.length
+    ? `${list.length} round${list.length !== 1 ? 's' : ''} played`
+    : '';
+
+  if (!list.length) { table.innerHTML = ''; return; }
+
+  const rows = list.slice(0, 10).map((e, i) => {
+    const avg   = e.avgTime == null ? '—' : `${e.avgTime.toFixed(1)}s`;
+    const badge = i === 0 ? '\u{1F947}' : i === 1 ? '\u{1F948}' : i === 2 ? '\u{1F949}' : (i + 1);
+    const mine  = e.ts === S.lastRoundTs ? ' class="lb-you"' : '';
+    return `<tr${mine}>
+      <td class="lb-rank">${badge}</td>
+      <td class="lb-score">${e.score}</td>
+      <td>${e.correct}/${e.total}</td>
+      <td class="lb-wrong">${e.wrong}</td>
+      <td>${avg}</td>
+      <td class="lb-date">${lbFmtDate(e.ts)}</td>
+    </tr>`;
+  }).join('');
+
+  table.innerHTML =
+    `<thead><tr><th></th><th>Score</th><th>Correct</th><th>Wrong</th><th>Avg</th><th>Date</th></tr></thead>` +
+    `<tbody>${rows}</tbody>`;
+}
+
+function openLeaderboard() {
+  const clear = document.getElementById('lb-clear');
+  clear.classList.remove('lb-clear-armed');
+  clear.textContent = 'Clear history';
+  renderLeaderboard();
+  document.getElementById('lb-overlay').classList.remove('hidden');
+}
+
+function closeLeaderboard() {
+  document.getElementById('lb-overlay').classList.add('hidden');
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1446,6 +1631,26 @@ function goToMainScreen() {
 
 document.getElementById('change-btn').addEventListener('click', goToMainScreen);
 document.getElementById('header-title').addEventListener('click', goToMainScreen);
+
+document.getElementById('leaderboard-btn').addEventListener('click', openLeaderboard);
+document.getElementById('rc-lb-btn').addEventListener('click', openLeaderboard);
+document.getElementById('lb-close').addEventListener('click', closeLeaderboard);
+document.getElementById('lb-overlay').addEventListener('click', e => {
+  if (e.target.id === 'lb-overlay') closeLeaderboard();
+});
+document.getElementById('lb-clear').addEventListener('click', e => {
+  const btn = e.currentTarget;
+  if (!btn.classList.contains('lb-clear-armed')) {
+    btn.classList.add('lb-clear-armed');
+    btn.textContent = 'Erase all history? Click again';
+    return;
+  }
+  lbStore([]);
+  S.lastRoundTs = null;
+  btn.classList.remove('lb-clear-armed');
+  btn.textContent = 'Clear history';
+  renderLeaderboard();
+});
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // INIT
