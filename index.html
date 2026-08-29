@@ -477,6 +477,7 @@ select:focus { border-color: var(--accent); }
 }
 .lb-clear:hover { color: var(--red); }
 .lb-clear.lb-clear-armed { color: var(--red); font-weight: 700; }
+.lb-foot-acc { margin-top: -6px; }
 .lb-link {
   display: block; width: 100%; background: none; border: none;
   color: var(--accent-h); cursor: pointer; font-size: 0.8rem;
@@ -677,6 +678,10 @@ select:focus { border-color: var(--accent); }
     <div class="lb-foot">
       <span id="lb-count"></span>
       <button class="lb-clear" id="lb-clear" type="button">Clear history</button>
+    </div>
+    <div class="lb-foot lb-foot-acc">
+      <span id="acc-summary"></span>
+      <button class="lb-clear" id="acc-clear" type="button">Reset accuracy</button>
     </div>
     <div class="rc-btns">
       <button class="btn btn-primary" id="lb-close">Close</button>
@@ -1718,11 +1723,29 @@ function renderLeaderboard() {
     `<tbody>${rows}</tbody>`;
 }
 
+function renderAccuracySummary() {
+  const { cells, asked, correct } = accSummary();
+  const el = document.getElementById('acc-summary');
+  const btn = document.getElementById('acc-clear');
+  if (!asked) {
+    el.textContent = 'No accuracy data yet';
+    btn.classList.add('hide');
+    return;
+  }
+  const pct = Math.round((correct / asked) * 100);
+  el.textContent = `${cells} note${cells !== 1 ? 's' : ''} tracked · ${pct}% correct (${asked} asked)`;
+  btn.classList.remove('hide');
+}
+
 function openLeaderboard() {
   const clear = document.getElementById('lb-clear');
   clear.classList.remove('lb-clear-armed');
   clear.textContent = 'Clear history';
+  const accBtn = document.getElementById('acc-clear');
+  accBtn.classList.remove('lb-clear-armed');
+  accBtn.textContent = 'Reset accuracy';
   renderLeaderboard();
+  renderAccuracySummary();
   document.getElementById('lb-overlay').classList.remove('hidden');
 }
 
@@ -1805,6 +1828,19 @@ document.getElementById('lb-clear').addEventListener('click', e => {
   btn.classList.remove('lb-clear-armed');
   btn.textContent = 'Clear history';
   renderLeaderboard();
+});
+document.getElementById('acc-clear').addEventListener('click', e => {
+  const btn = e.currentTarget;
+  if (!btn.classList.contains('lb-clear-armed')) {
+    btn.classList.add('lb-clear-armed');
+    btn.textContent = 'Erase all accuracy data? Click again';
+    return;
+  }
+  accClear();
+  btn.classList.remove('lb-clear-armed');
+  btn.textContent = 'Reset accuracy';
+  renderAccuracySummary();
+  if (S.gameType === 'noteid') styleAll(); // refresh the overlay if it's showing
 });
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
