@@ -201,6 +201,16 @@ select:focus { border-color: var(--accent); }
   width: max-content;
 }
 
+/* Note ID: flash a red boundary around the whole board on a wrong guess */
+.fretboard.board-mistake-flash {
+  animation: boardMistakeFlash 0.5s ease;
+}
+@keyframes boardMistakeFlash {
+  0%   { box-shadow: inset 0 0 0 0 rgba(255,45,45,0),    0 0 0 0 rgba(255,45,45,0);   border-color: #5c4020; }
+  12%  { box-shadow: inset 0 0 22px 3px rgba(255,45,45,0.85), 0 0 14px 2px rgba(255,45,45,0.55); border-color: #ff3b3b; }
+  100% { box-shadow: inset 0 0 0 0 rgba(255,45,45,0),    0 0 0 0 rgba(255,45,45,0);   border-color: #5c4020; }
+}
+
 /* String label cells */
 .slbl {
   display: flex;
@@ -1247,6 +1257,16 @@ function startNoteId() {
   refreshUI();
 }
 
+// Note ID: briefly flash a red boundary around the fretboard to signal a wrong guess.
+function flashBoardMistake() {
+  const fb = document.getElementById('fretboard');
+  if (!fb) return;
+  fb.classList.remove('board-mistake-flash');
+  void fb.offsetWidth; // restart the animation even on rapid repeat mistakes
+  fb.classList.add('board-mistake-flash');
+  setTimeout(() => fb.classList.remove('board-mistake-flash'), 550);
+}
+
 function onNoteGuess(i) {
   if (S.mode !== 'playing' || S.gameType !== 'noteid') return;
   const g   = S.game;
@@ -1274,6 +1294,7 @@ function onNoteGuess(i) {
     g.wrongCount++;
     btn.classList.add('np-wrong-flash');
     setTimeout(() => btn.classList.remove('np-wrong-flash'), 400);
+    flashBoardMistake();
     refreshGameBar();
   }
 }
