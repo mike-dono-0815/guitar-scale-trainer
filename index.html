@@ -388,6 +388,20 @@ select:focus { border-color: var(--accent); }
   50%      { transform: scale(1.16); }
 }
 
+/* Note ID: accuracy overlay — dot fills from the bottom by hit-rate.
+   Fill height + gradient are set inline; these are the shared trimmings. */
+.ndot.acc-dot {
+  color: #fff;
+  font-size: 0.55rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.95);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
+}
+.ndot.acc-empty {
+  background: #1b1b2c !important;
+  color: #4a4a68;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
+}
+
 
 /* â”€â”€ Result Overlay â”€â”€ */
 .overlay {
@@ -605,6 +619,11 @@ select:focus { border-color: var(--accent); }
     <input type="checkbox" id="show-notes-toggle">
     <span class="switch-track"><span class="switch-thumb"></span></span>
   </label>
+  <label class="switch-inline hide" id="accuracy-wrap">
+    <span class="switch-inline-text">Accuracy</span>
+    <input type="checkbox" id="accuracy-toggle">
+    <span class="switch-track"><span class="switch-thumb"></span></span>
+  </label>
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
 
@@ -718,6 +737,7 @@ let S = {
   root: 4,              // E
   scale: 'Natural Minor',
   showAllNotes: false,  // Note ID: reveal every note label as a helper
+  showAccuracy: false,  // Note ID: overlay per-cell historical accuracy on the board
   game: null,
   session: { score: 0, rounds: 0 },
 };
@@ -1006,9 +1026,27 @@ function styleAllNoteHunt() {
   }
 }
 
+// Note ID accuracy overlay: fill a dot from the bottom in proportion to how
+// often this exact cell has been identified correctly across all past rounds.
+function styleAccuracyDot(d, rec, col) {
+  if (!rec || !rec.asked) {
+    d.className = 'ndot acc-empty';
+    d.style.background = '';
+    d.style.boxShadow  = '';
+    d.textContent = '';
+    return;
+  }
+  const pct = Math.round((rec.correct / rec.asked) * 100);
+  d.className = 'ndot acc-dot';
+  d.style.background = `linear-gradient(to top, ${col} ${pct}%, #24243a ${pct}%)`;
+  d.style.boxShadow = '';
+  d.textContent = pct;
+}
+
 function styleAllNoteId() {
   const { mode, game } = S;
   const targetKey = (mode === 'playing' && game.current) ? pk(game.current.s, game.current.f) : null;
+  const acc = S.showAccuracy ? accLoad() : null;
 
   for (let s = 0; s < 6; s++) {
     for (let f = 0; f <= MAX_FRET; f++) {
@@ -1017,6 +1055,13 @@ function styleAllNoteId() {
       const col = NOTE_COLORS[ni];
       const key = pk(s, f);
       d.style.setProperty('--nc', col);
+
+      // Accuracy overlay wins for every cell except the one being asked, which
+      // must keep its question styling so the round stays playable.
+      if (acc && key !== targetKey) {
+        styleAccuracyDot(d, acc[`${s}_${f}`], col);
+        continue;
+      }
 
       if (mode === 'playing') {
         const isTarget = key === targetKey;
@@ -1296,6 +1341,9 @@ function onNoteGuess(i) {
       g.times.push((performance.now() - g.questionStart) / 1000);
       btn.classList.add('np-correct');
     }
+    // Log this cell's outcome for the accuracy overlay. A revealed question is
+    // left out entirely rather than counted as a miss.
+    if (!g.revealed) accRecord(g.current.s, g.current.f, !g.current.missed);
     refreshGameBar();
 
     setTimeout(() => {
@@ -1312,6 +1360,7 @@ function onNoteGuess(i) {
     }, 400);
   } else {
     g.wrongCount++;
+    g.current.missed = true; // a wrong guess disqualifies this cell from an accuracy "hit"
     btn.classList.add('np-wrong-flash');
     setTimeout(() => btn.classList.remove('np-wrong-flash'), 400);
     flashBoardMistake();
@@ -1373,6 +1422,8 @@ function refreshUI() {
   notePicker.classList.toggle('hide', !(gameType === 'noteid' && mode === 'playing'));
   showNotesWrap.classList.toggle('hide', gameType !== 'noteid');
   document.getElementById('show-notes-toggle').checked = S.showAllNotes;
+  document.getElementById('accuracy-wrap').classList.toggle('hide', gameType !== 'noteid');
+  document.getElementById('accuracy-toggle').checked = S.showAccuracy;
 
   if (mode === 'playing') {
     startBtn.textContent = '\u21BA Restart';
@@ -1545,6 +1596,49 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// NOTE ID ACCURACY  (localStorage-backed per-cell hit-rate history)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Shape: { "<s>_<f>": { asked: n, correct: n }, ... }
+
+const ACC_KEY = 'guitar-scale-trainer:noteid-accuracy';
+
+function accLoad() {
+  try {
+    const o = JSON.parse(localStorage.getItem(ACC_KEY) || '{}');
+    return (o && typeof o === 'object') ? o : {};
+  } catch (e) {
+    return {}; // storage disabled / corrupt — accuracy is best-effort
+  }
+}
+
+function accStore(o) {
+  try { localStorage.setItem(ACC_KEY, JSON.stringify(o)); }
+  catch (e) { /* ignore: private mode, quota, etc. */ }
+}
+
+// Log one resolved Note ID question for cell (s, f). `correct` is true only when
+// it was answered on the first try without the note being revealed.
+function accRecord(s, f, correct) {
+  const o = accLoad();
+  const k = `${s}_${f}`;
+  const c = o[k] || { asked: 0, correct: 0 };
+  c.asked   += 1;
+  c.correct += correct ? 1 : 0;
+  o[k] = c;
+  accStore(o);
+}
+
+function accClear() { accStore({}); }
+
+// { cells, asked, correct } summary across every tracked cell.
+function accSummary() {
+  const o = accLoad();
+  let asked = 0, correct = 0, cells = 0;
+  for (const k in o) { cells++; asked += o[k].asked; correct += o[k].correct; }
+  return { cells, asked, correct };
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // NOTE ID LEADERBOARD  (localStorage-backed round history)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1668,6 +1762,11 @@ document.getElementById('show-notes-toggle').addEventListener('change', e => {
     S.game.revealed = true;
     refreshGameBar();
   }
+  styleAll();
+});
+
+document.getElementById('accuracy-toggle').addEventListener('change', e => {
+  S.showAccuracy = e.target.checked;
   styleAll();
 });
 
