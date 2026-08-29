@@ -518,6 +518,10 @@ select:focus { border-color: var(--accent); }
 .np-btn.np-wrong-flash {
   animation: wrongFlash 0.38s ease forwards;
 }
+/* Correct note, but "Show Notes" was on for this question — no points awarded */
+.np-btn.np-nopoint {
+  box-shadow: 0 0 0 3px #fff, 0 0 16px #d9a441;
+}
 
 /* â”€â”€ Color Legend â”€â”€ */
 .legend {
@@ -632,6 +636,7 @@ select:focus { border-color: var(--accent); }
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
     <div class="rc-time hide" id="rc-time">Avg time to identify: <span id="rc-time-val">0.0s</span></div>
     <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
+    <div class="rc-time hide" id="rc-nopoint">Notes shown (no points): <span id="rc-nopoint-val">0</span></div>
     <div class="rc-rank hide" id="rc-rank">Leaderboard: <span id="rc-rank-val">—</span></div>
     <button class="lb-link hide" id="rc-lb-btn" type="button">View full leaderboard &rarr;</button>
     <div class="rc-btns">
@@ -860,6 +865,12 @@ const PEEK_HOLD_MS = 350;
 
 function showNotePeek(cellEl, s, f) {
   const ni  = noteAt(s, f);
+  // Peeking the asked cell during a Note ID round reveals the answer — forfeit its points.
+  if (S.mode === 'playing' && S.gameType === 'noteid' && S.game && S.game.current
+      && S.game.current.s === s && S.game.current.f === f) {
+    S.game.revealed = true;
+    refreshGameBar();
+  }
   const tip = document.getElementById('note-peek');
   const rect = cellEl.getBoundingClientRect();
   tip.textContent = NOTES[ni];
@@ -1193,6 +1204,7 @@ function pickNoteIdQuestion(g) {
   } while (g.usedKeys.has(key) && g.usedKeys.size < NOTE_ID_CELL_COUNT);
   g.usedKeys.add(key);
   g.current = { s, f, note: noteAt(s, f) };
+  g.revealed = !!S.showAllNotes; // a fresh question is already "spoiled" if notes are visible
   g.questionStart = performance.now();
   scrollCellIntoView(s, f);
 }
@@ -1236,7 +1248,7 @@ function noteIdSpeedBonus(g) {
 }
 
 function resetNotePicker() {
-  document.querySelectorAll('.np-btn').forEach(b => b.classList.remove('np-correct', 'np-wrong-flash'));
+  document.querySelectorAll('.np-btn').forEach(b => b.classList.remove('np-correct', 'np-wrong-flash', 'np-nopoint'));
 }
 
 function startNoteId() {
@@ -1245,6 +1257,8 @@ function startNoteId() {
     asked: 1,
     correct: 0,
     wrongCount: 0,
+    noPointCount: 0,
+    revealed: false,   // was "Show Notes" on at any point during the current question?
     usedKeys: new Set(),
     current: null,
     times: [],
@@ -1273,9 +1287,15 @@ function onNoteGuess(i) {
   const btn = document.getElementById(`np_${i}`);
 
   if (i === g.current.note) {
-    g.correct++;
-    g.times.push((performance.now() - g.questionStart) / 1000);
-    btn.classList.add('np-correct');
+    if (g.revealed) {
+      // Right note, but "Show Notes" was used this question — no points, no speed credit.
+      g.noPointCount++;
+      btn.classList.add('np-nopoint');
+    } else {
+      g.correct++;
+      g.times.push((performance.now() - g.questionStart) / 1000);
+      btn.classList.add('np-correct');
+    }
     refreshGameBar();
 
     setTimeout(() => {
@@ -1407,8 +1427,9 @@ function refreshGameBar() {
   } else if (S.gameType === 'noteid') {
     document.getElementById('found-pill').textContent =
       `Correct: ${g.correct} / ${g.total}`;
-    document.getElementById('progress-pill').textContent =
-      `Question ${g.asked} / ${g.total}`;
+    document.getElementById('progress-pill').textContent = g.revealed
+      ? `Question ${g.asked} / ${g.total} — notes shown, no points`
+      : `Question ${g.asked} / ${g.total}`;
     const avg = noteIdAvgTime(g);
     document.getElementById('time-pill').textContent =
       avg === null ? 'Avg: —' : `Avg: ${avg.toFixed(1)}s`;
@@ -1496,6 +1517,14 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
     document.getElementById('rc-speed-val').textContent = `+${speedBonus}`;
   } else {
     rcSpeed.classList.add('hide');
+  }
+
+  const rcNoPoint = document.getElementById('rc-nopoint');
+  if (g.noPointCount > 0) {
+    rcNoPoint.classList.remove('hide');
+    document.getElementById('rc-nopoint-val').textContent = g.noPointCount;
+  } else {
+    rcNoPoint.classList.add('hide');
   }
 
   const rcRank = document.getElementById('rc-rank');
@@ -1633,6 +1662,12 @@ document.getElementById('scale-sel').addEventListener('change', e => {
 
 document.getElementById('show-notes-toggle').addEventListener('change', e => {
   S.showAllNotes = e.target.checked;
+  // Revealing the notes mid-question forfeits points for that question, even
+  // if the notes are switched off again immediately afterwards.
+  if (e.target.checked && S.mode === 'playing' && S.gameType === 'noteid' && S.game) {
+    S.game.revealed = true;
+    refreshGameBar();
+  }
   styleAll();
 });
 
