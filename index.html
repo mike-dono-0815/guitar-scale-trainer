@@ -1245,18 +1245,48 @@ function endNoteHuntRound() {
 const NOTE_ID_QUESTIONS = 30;
 const NOTE_ID_CELL_COUNT = 6 * (MAX_FRET + 1);
 
+// Selection weight for a cell, from its historical accuracy record. Every cell
+// keeps a non-zero weight so the pick stays fully random — this only tilts the
+// odds toward cells that are unseen or poorly known:
+//   never asked        → 12  (top priority)
+//   answered wrong a lot→ up to ~9
+//   answered right a lot→ tapers toward 1
+function noteIdCellWeight(s, f, acc) {
+  const c = acc[`${s}_${f}`];
+  if (!c || !c.asked) return 12;
+  const accuracy    = c.correct / c.asked;        // 0..1
+  const missBias     = 1 + (1 - accuracy) * 8;    // 1 (always right) .. 9 (always wrong)
+  const familiarity  = 1 / Math.sqrt(c.asked);    // less-sampled cells rank a little higher
+  return Math.max(1, missBias * familiarity);
+}
+
 function pickNoteIdQuestion(g) {
-  let s, f, key;
-  do {
-    s = Math.floor(Math.random() * 6);
-    f = Math.floor(Math.random() * (MAX_FRET + 1));
-    key = pk(s, f);
-  } while (g.usedKeys.has(key) && g.usedKeys.size < NOTE_ID_CELL_COUNT);
-  g.usedKeys.add(key);
-  g.current = { s, f, note: noteAt(s, f) };
+  const acc     = accLoad();
+  const allUsed = g.usedKeys.size >= NOTE_ID_CELL_COUNT;
+
+  // Build the candidate pool (cells not yet asked this round) with a weight each.
+  const cands = [];
+  let totalW = 0;
+  for (let s = 0; s < 6; s++) {
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const key = pk(s, f);
+      if (!allUsed && g.usedKeys.has(key)) continue;
+      const w = noteIdCellWeight(s, f, acc);
+      cands.push({ s, f, key, w });
+      totalW += w;
+    }
+  }
+
+  // Weighted random draw.
+  let r = Math.random() * totalW;
+  let chosen = cands[cands.length - 1];
+  for (const c of cands) { r -= c.w; if (r < 0) { chosen = c; break; } }
+
+  g.usedKeys.add(chosen.key);
+  g.current = { s: chosen.s, f: chosen.f, note: noteAt(chosen.s, chosen.f) };
   g.revealed = !!S.showAllNotes; // a fresh question is already "spoiled" if notes are visible
   g.questionStart = performance.now();
-  scrollCellIntoView(s, f);
+  scrollCellIntoView(chosen.s, chosen.f);
 }
 
 // Center the fretboard's horizontal scroll on a cell, e.g. so a highlighted
