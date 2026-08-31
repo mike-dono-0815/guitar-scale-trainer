@@ -368,6 +368,42 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .scell:hover .ndot { transform: scale(1.13); }
 .scell:active .ndot { transform: scale(0.95); }
 
+/* Note label — its own layer, painted above the strings (z-index 3) and the
+   dot fills so anything written on the board stays readable. */
+.nlbl {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  user-select: none;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0,0,0,0.92), 0 1px 3px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.5);
+  transition: transform 0.12s;
+}
+.scell:hover  .nlbl { transform: translate(-50%, -50%) scale(1.13); }
+.scell:active .nlbl { transform: translate(-50%, -50%) scale(0.95); }
+
+/* Label tint mirrors the dot's state (set on the cell as data-dot) */
+.scell[data-dot="b-out"] .nlbl,
+.scell[data-dot="acc-empty"] .nlbl {
+  color: #8a7a60;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.7);
+}
+.scell[data-dot="r-out"] .nlbl {
+  color: #4a3d2b;
+  text-shadow: none;
+  opacity: 0.5;
+}
+.scell[data-dot="g-wrong"] .nlbl,
+.scell[data-dot="r-wrong-tap"] .nlbl { color: #ff9a9a; }
+.scell[data-dot="acc-dot"] .nlbl { font-size: 0.5rem; }
+.scell[data-dot="r-missed"] .nlbl { animation: missedPulse 1.1s ease-in-out infinite; }
+
 /* â”€â”€ Dot visual states â”€â”€ */
 
 /* Browse: in scale */
@@ -629,7 +665,9 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   .header-title { font-size: 1.05rem; }
   .controls { padding: 10px 14px; gap: 8px; }
   .fretboard-outer { padding: 14px 14px 14px 14px; }
-  .ndot { width: 24px; height: 24px; font-size: 0.54rem; }
+  .ndot { width: 24px; height: 24px; }
+  .nlbl { font-size: 0.54rem; }
+  .scell[data-dot="acc-dot"] .nlbl { font-size: 0.44rem; }
   .result-card { padding: 22px 18px 18px; }
 }
 </style>
@@ -944,6 +982,12 @@ function buildFretboard() {
       dot.style.setProperty('--nc', NOTE_COLORS[ni]);
       cell.appendChild(dot);
 
+      // Note label lives in its own element so it always paints above the
+      // strings and dot fills (see .nlbl z-index).
+      const lbl = document.createElement('div');
+      lbl.className = 'nlbl';
+      cell.appendChild(lbl);
+
       attachPeekHold(cell, s, f);
     }
   }
@@ -1008,10 +1052,18 @@ function attachPeekHold(cell, s, f) {
 
 function dot(s, f) { return document.getElementById(`d_${s}_${f}`); }
 
+// The note label is a sibling of the dot; keep the two in sync.
+function setDotText(d, txt) {
+  const l = d.parentElement && d.parentElement.querySelector('.nlbl');
+  if (l) l.textContent = txt;
+}
+
 function setDotClass(d, cls, bg) {
   d.className = 'ndot ' + cls;
   d.style.background = bg || '';
   d.style.boxShadow  = '';
+  // Mirror the state onto the cell so the label layer can tint itself.
+  if (d.parentElement) d.parentElement.dataset.dot = cls.split(' ')[0];
 }
 
 function styleAll() {
@@ -1034,7 +1086,7 @@ function styleAllScale() {
       const key = pk(s, f);
       const inScale = scalePosSet.has(key);
       d.style.setProperty('--nc', col);
-      d.textContent = NOTES[ni];
+      setDotText(d, NOTES[ni]);
 
       if (mode === 'browse') {
         if (inScale) {
@@ -1079,7 +1131,7 @@ function styleAllNoteHunt() {
       if (mode === 'browse' || mode === 'playing') {
         // Note Hunt is a memorization drill: never reveal identities before
         // or during a round, only in the post-round review below.
-        d.textContent = '';
+        setDotText(d, '');
         // Only light up cells for the CURRENT target — g.found is cumulative
         // across the whole round (needed for scoring/review), but showing
         // every previously-found note here would give away future targets.
@@ -1087,7 +1139,7 @@ function styleAllNoteHunt() {
         setDotClass(d, isCurrentFind ? 'g-ok' : 'g-hidden', isCurrentFind ? col : undefined);
 
       } else { // result: reveal the board
-        d.textContent = NOTES[ni];
+        setDotText(d, NOTES[ni]);
         if (game.found.has(key))         setDotClass(d, 'r-found', col);
         else if (game.wrongCells.has(key)) setDotClass(d, 'r-wrong-tap');
         else                               setDotClass(d, 'r-out');
@@ -1103,14 +1155,16 @@ function styleAccuracyDot(d, rec, col) {
     d.className = 'ndot acc-empty';
     d.style.background = '';
     d.style.boxShadow  = '';
-    d.textContent = '';
+    if (d.parentElement) d.parentElement.dataset.dot = 'acc-empty';
+    setDotText(d, '');
     return;
   }
   const pct = Math.round((rec.correct / rec.asked) * 100);
   d.className = 'ndot acc-dot';
   d.style.background = `linear-gradient(to top, ${col} ${pct}%, #241a10 ${pct}%)`;
   d.style.boxShadow = '';
-  d.textContent = pct;
+  if (d.parentElement) d.parentElement.dataset.dot = 'acc-dot';
+  setDotText(d, pct);
 }
 
 function styleAllNoteId() {
@@ -1137,14 +1191,14 @@ function styleAllNoteId() {
         const isTarget = key === targetKey;
         if (S.showAllNotes) {
           // helper toggle: reveal every label, but keep the asked cell distinct
-          d.textContent = NOTES[ni];
+          setDotText(d, NOTES[ni]);
           setDotClass(d, isTarget ? 'q-target' : 'b-in', isTarget ? undefined : col);
         } else {
-          d.textContent = ''; // note identity must stay hidden while guessing
+          setDotText(d, ''); // note identity must stay hidden while guessing
           setDotClass(d, isTarget ? 'q-target' : 'g-hidden');
         }
       } else { // browse or result: reveal the board
-        d.textContent = NOTES[ni];
+        setDotText(d, NOTES[ni]);
         setDotClass(d, 'b-in', col);
       }
     }
@@ -1207,6 +1261,7 @@ function onTapScale(s, f) {
     const d = dot(s, f);
     d.className = 'ndot g-wrong g-wrong-flash';
     d.style.background = '';
+    if (d.parentElement) d.parentElement.dataset.dot = 'g-wrong';
     // remove flash class after animation
     setTimeout(() => {
       if (d.classList.contains('g-wrong-flash')) d.classList.remove('g-wrong-flash');
@@ -1287,6 +1342,7 @@ function onTapNoteHunt(s, f) {
     const d = dot(s, f);
     d.className = 'ndot g-hidden g-wrong-flash';
     d.style.background = '';
+    if (d.parentElement) d.parentElement.dataset.dot = 'g-hidden';
     setTimeout(() => {
       if (d.classList.contains('g-wrong-flash')) d.classList.remove('g-wrong-flash');
     }, 400);
