@@ -638,6 +638,46 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .rc-rank span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
 
+/* Note ID: prominent leaderboard-rank banner above the score stats */
+.rc-rank-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 6px 0 16px;
+  padding: 11px 18px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.rc-rank-banner.hide { display: none; }
+.rrb-medal { font-size: 2.1rem; line-height: 1; }
+.rrb-medal.hide { display: none; }
+.rrb-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.12; }
+.rrb-rank {
+  font-family: 'Big Shoulders Display', 'Hanken Grotesk', sans-serif;
+  font-size: 1.95rem;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: 0.01em;
+}
+.rrb-of {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-dim);
+}
+.rc-rank-banner[data-tier="1"] {
+  border-color: var(--gold);
+  background: rgba(233,168,62,0.12);
+  box-shadow: 0 0 22px -5px rgba(233,168,62,0.55);
+}
+.rc-rank-banner[data-tier="2"] { border-color: #c8ccd2; background: rgba(200,204,210,0.10); }
+.rc-rank-banner[data-tier="2"] .rrb-rank { color: #d8dce2; }
+.rc-rank-banner[data-tier="3"] { border-color: #cd8b5c; background: rgba(205,139,92,0.12); }
+.rc-rank-banner[data-tier="3"] .rrb-rank { color: #e2a277; }
+
 /* ── Note ID Leaderboard ── */
 .lb-card { max-width: 470px; text-align: left; }
 .lb-title { font-family: 'Big Shoulders Display', sans-serif; font-size: 1.5rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; margin-bottom: 2px; }
@@ -853,16 +893,22 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
     <div class="rc-emoji"  id="rc-emoji">&#127881;</div>
     <div class="rc-title"  id="rc-title">Round Complete!</div>
     <div class="rc-scale"  id="rc-scale">E Natural Minor</div>
+    <div class="rc-rank-banner hide" id="rc-rank-banner">
+      <span class="rrb-medal" id="rrb-medal">&#129351;</span>
+      <div class="rrb-text">
+        <span class="rrb-rank" id="rrb-rank">#1</span>
+        <span class="rrb-of" id="rrb-of">of 12 rounds</span>
+      </div>
+    </div>
     <div class="rc-stats">
       <div class="rcs s"><div class="v" id="rc-score">0</div><div class="l">Score</div></div>
       <div class="rcs f"><div class="v" id="rc-found">0/0</div><div class="l" id="rc-found-lbl">Found</div></div>
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
-    <div class="rc-time hide" id="rc-time">Avg time to identify: <span id="rc-time-val">0.0s</span></div>
+    <div class="rc-time hide" id="rc-time"><span id="rc-time-lbl">Avg time to identify:</span> <span id="rc-time-val">0.0s</span></div>
     <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
     <div class="rc-time hide" id="rc-nopoint">Notes shown (no points): <span id="rc-nopoint-val">0</span></div>
-    <div class="rc-rank hide" id="rc-rank">Leaderboard: <span id="rc-rank-val">—</span></div>
     <button class="lb-link hide" id="rc-lb-btn" type="button">View full leaderboard &rarr;</button>
     <div class="rc-btns">
       <button class="btn btn-primary"   id="next-btn">&#9654; Next Round</button>
@@ -1408,6 +1454,7 @@ function styleAllNoteId() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGame() {
+  stopScaleClock();
   clearPatternOverlay();
   if (S.gameType === 'notehunt')    startNoteHunt();
   else if (S.gameType === 'noteid') startNoteId();
@@ -1430,6 +1477,37 @@ function completeRound() {
 
 // â”€â”€ Scale Practice mode â”€â”€
 
+// Speed bonus for finishing a whole scale. Par pace ~1 note/sec; the window
+// scales with the scale's size so bigger scales get proportionally more time.
+const SCALE_SPEED_BONUS_MAX = 50;
+function scaleSpeedBonus(seconds, notes) {
+  const fast = notes * 0.60;  // at/under this pace → full bonus
+  const slow = notes * 2.20;  // at/over this pace  → nothing
+  const frac = (slow - seconds) / (slow - fast);
+  return Math.round(SCALE_SPEED_BONUS_MAX * Math.max(0, Math.min(1, frac)));
+}
+
+function fmtClock(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+let scaleTimerId = null;
+function startScaleClock() {
+  stopScaleClock();
+  updateScaleClock();
+  scaleTimerId = setInterval(updateScaleClock, 1000);
+}
+function stopScaleClock() {
+  if (scaleTimerId) { clearInterval(scaleTimerId); scaleTimerId = null; }
+}
+function updateScaleClock() {
+  const g = S.game;
+  if (!g || S.gameType !== 'scale' || S.mode !== 'playing') return;
+  const t = g.startedAt == null ? 0 : (performance.now() - g.startedAt) / 1000;
+  document.getElementById('time-pill').textContent = `Time: ${fmtClock(t)}`;
+}
+
 function startScaleGame() {
   const scalePos = buildScalePositions(S.root, S.scale);
   S.game = {
@@ -1437,12 +1515,16 @@ function startScaleGame() {
     boxes: buildPentaBoxes(pentaBoxEffRoot()), // [] unless a 5-note pentatonic
     boxDone: new Set(),                         // box-instance indices already flashed
     patternsCleared: new Set(),                 // pattern numbers 1..5 ever cleared
+    startedAt: null,                            // set on the first tap
+    elapsed: 0,
+    speedBonus: 0,
   };
   S.mode = 'playing';
   document.getElementById('overlay').classList.add('hidden');
   clearPatternOverlay();
   styleAll();
   refreshUI();
+  startScaleClock();
 }
 
 function onTapScale(s, f) {
@@ -1450,6 +1532,8 @@ function onTapScale(s, f) {
   const key = pk(s, f);
 
   if (g.correct.has(key) || g.wrongPos.has(key)) return; // already tapped
+
+  if (g.startedAt == null) g.startedAt = performance.now(); // clock starts on first tap
 
   if (g.scalePos.has(key)) {
     g.correct.add(key);
@@ -1479,7 +1563,16 @@ function onTapScale(s, f) {
 
 function endScaleRound() {
   const g = S.game;
-  const roundScore = Math.max(0, 100 - g.wrongCount * 10);
+  stopScaleClock();
+
+  const fullyFound = g.correct.size === g.scalePos.size;
+  g.elapsed = g.startedAt == null ? 0 : (performance.now() - g.startedAt) / 1000;
+  // Speed bonus only when the whole scale was actually cleared — bailing early
+  // with "Complete Round" earns none.
+  g.speedBonus = fullyFound ? scaleSpeedBonus(g.elapsed, g.scalePos.size) : 0;
+
+  const accuracyScore = Math.max(0, 100 - g.wrongCount * 10);
+  const roundScore = Math.max(0, accuracyScore + g.speedBonus);
   S.session.score  += roundScore;
   S.session.rounds += 1;
   S.mode = 'result';
@@ -1880,7 +1973,8 @@ function refreshUI() {
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
   targetPill.classList.toggle('hide', gameType !== 'notehunt');
   progPill.classList.toggle('hide', gameType === 'scale');
-  timePill.classList.toggle('hide', gameType !== 'noteid');
+  timePill.classList.toggle('hide',
+    !(gameType === 'noteid' || (gameType === 'scale' && mode === 'playing')));
   notePicker.classList.toggle('hide', !(gameType === 'noteid' && mode === 'playing'));
   showNotesWrap.classList.toggle('hide', gameType !== 'noteid');
   document.getElementById('show-notes-toggle').checked = S.showAllNotes;
@@ -1952,6 +2046,7 @@ function refreshGameBar() {
   } else {
     document.getElementById('found-pill').textContent =
       `Found: ${g.correct.size} / ${g.scalePos.size}`;
+    updateScaleClock();
   }
 }
 
@@ -1973,10 +2068,24 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-found').textContent = `${found}/${total}`;
   document.getElementById('rc-wrong').textContent = wrong;
   document.getElementById('rc-session').textContent = S.session.score;
-  document.getElementById('rc-time').classList.add('hide');
   document.getElementById('rc-speed').classList.add('hide');
-  document.getElementById('rc-rank').classList.add('hide');
+  document.getElementById('rc-nopoint').classList.add('hide');
+  document.getElementById('rc-rank-banner').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
+
+  const rcTime = document.getElementById('rc-time');
+  if (g.elapsed > 0) {
+    document.getElementById('rc-time-lbl').textContent = 'Time:';
+    document.getElementById('rc-time-val').textContent = fmtClock(g.elapsed);
+    rcTime.classList.remove('hide');
+  } else {
+    rcTime.classList.add('hide');
+  }
+  if (g.speedBonus > 0) {
+    document.getElementById('rc-speed-val').textContent = `+${g.speedBonus}`;
+    document.getElementById('rc-speed').classList.remove('hide');
+  }
+
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -1997,7 +2106,8 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-time').classList.add('hide');
   document.getElementById('rc-speed').classList.add('hide');
-  document.getElementById('rc-rank').classList.add('hide');
+  document.getElementById('rc-nopoint').classList.add('hide');
+  document.getElementById('rc-rank-banner').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
@@ -2024,6 +2134,7 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
     rcTime.classList.add('hide');
   } else {
     rcTime.classList.remove('hide');
+    document.getElementById('rc-time-lbl').textContent = 'Avg time to identify:';
     document.getElementById('rc-time-val').textContent = `${avg.toFixed(1)}s`;
   }
 
@@ -2043,18 +2154,22 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
     rcNoPoint.classList.add('hide');
   }
 
-  const rcRank = document.getElementById('rc-rank');
+  const banner = document.getElementById('rc-rank-banner');
   document.getElementById('rc-lb-btn').classList.remove('hide');
   if (standing) {
     const { rank, total } = standing;
-    let txt;
-    if (rank === 1)       txt = `\u{1F3C6} New #1 of ${total}!`;
-    else if (rank <= 10)  txt = `Top 10 — #${rank} of ${total}`;
-    else                  txt = `#${rank} of ${total}`;
-    document.getElementById('rc-rank-val').textContent = txt;
-    rcRank.classList.remove('hide');
+    const medalEl = document.getElementById('rrb-medal');
+    const medal = rank === 1 ? '\u{1F947}' : rank === 2 ? '\u{1F948}'
+                : rank === 3 ? '\u{1F949}' : rank <= 10 ? '\u{1F396}\u{FE0F}' : '';
+    medalEl.textContent = medal;
+    medalEl.classList.toggle('hide', !medal);
+    document.getElementById('rrb-rank').textContent = `#${rank}`;
+    document.getElementById('rrb-of').textContent =
+      rank === 1 ? `Best of ${total} rounds` : `of ${total} rounds`;
+    banner.dataset.tier = rank <= 3 ? String(rank) : 'plain';
+    banner.classList.remove('hide');
   } else {
-    rcRank.classList.add('hide');
+    banner.classList.add('hide');
   }
 
   document.getElementById('overlay').classList.remove('hidden');
@@ -2223,6 +2338,7 @@ document.getElementById('mode-sel').addEventListener('change', e => {
   S.gameType = e.target.value;
   S.mode = 'browse';
   S.game = null;
+  stopScaleClock();
   clearPatternOverlay();
   styleAll();
   refreshUI();
@@ -2274,6 +2390,7 @@ function goToMainScreen() {
   document.getElementById('overlay').classList.add('hidden');
   S.mode = 'browse';
   S.game = null;
+  stopScaleClock();
   clearPatternOverlay();
   styleAll();
   refreshUI();
