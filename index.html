@@ -237,6 +237,90 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   box-shadow: 0 0 0 1px #1c1009, 0 22px 48px -16px rgba(0,0,0,0.65);
   min-width: max-content;
   width: max-content;
+  position: relative;
+}
+
+/* Scale Practice: momentary outline drawn around a pentatonic box the moment
+   its last note is found. It sweeps on, pulses gold, then fades — nothing
+   persists on the board, so overlapping boxes never accumulate. */
+#pattern-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 6;
+}
+.pattern-flourish {
+  fill: var(--gold);
+  fill-opacity: 0.12;
+  stroke: var(--gold);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  animation: patternSweep 0.5s ease forwards, patternGlowOut 1.7s ease 0.4s forwards;
+}
+@keyframes patternSweep {
+  from { stroke-dashoffset: var(--len); }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes patternGlowOut {
+  0%   { filter: drop-shadow(0 0 0 rgba(233,168,62,0)); }
+  22%  { filter: drop-shadow(0 0 10px rgba(233,168,62,0.9)); fill-opacity: 0.2; }
+  100% { filter: drop-shadow(0 0 0 rgba(233,168,62,0)); opacity: 0; fill-opacity: 0; }
+}
+.pattern-flourish-tag {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--gold);
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.62);
+  stroke-width: 3px;
+  animation: patternTagOut 1.9s ease forwards;
+}
+@keyframes patternTagOut {
+  0%, 55% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+/* Pattern tracker — five pips in the game bar; each lights gold when every
+   note of that box shape has been found at least once this round. */
+.pattern-tracker { display: flex; align-items: center; gap: 5px; }
+.pattern-tracker.hide { display: none; }
+.pt-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+.pt-pip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0;
+  cursor: default;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.pt-pip.done {
+  background: var(--gold);
+  color: #1d1307;
+  border-color: var(--gold);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(233,168,62,0.5);
+}
+.pt-pip.just-done { animation: ptPop 0.5s ease; }
+@keyframes ptPop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.32); }
+  100% { transform: scale(1); }
 }
 
 /* Note ID: flash a red boundary around the whole board on a wrong guess */
@@ -738,6 +822,14 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
     <input type="checkbox" id="scale-notes-toggle" checked>
     <span class="switch-track"><span class="switch-thumb"></span></span>
   </label>
+  <div class="pattern-tracker hide" id="pattern-tracker" aria-label="Pentatonic box patterns cleared this round">
+    <span class="pt-label">Patterns</span>
+    <button class="pt-pip" type="button" data-pattern="1">1</button>
+    <button class="pt-pip" type="button" data-pattern="2">2</button>
+    <button class="pt-pip" type="button" data-pattern="3">3</button>
+    <button class="pt-pip" type="button" data-pattern="4">4</button>
+    <button class="pt-pip" type="button" data-pattern="5">5</button>
+  </div>
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
 
@@ -845,6 +937,20 @@ const MARKERS = {3:'s',5:'s',7:'s',9:'s',12:'d',15:'s',17:'s',19:'s',21:'s'};
 
 const MAX_FRET = 22;
 
+// The five pentatonic "box" shapes, as [lowFret, highFret] offsets per string
+// (low E → high e) from a box origin fret. The origin is any fret on the low E
+// string sounding the pentatonic root, so each shape recurs every 12 frets.
+// These are the minor-pentatonic shapes; Major Pentatonic reuses them anchored
+// on its relative-minor root (root + 9). Verified: every offset lands on a
+// scale tone. Adjacent boxes share a column (box N's top = box N+1's bottom).
+const PENTA_BOX_OFFSETS = [
+  [[0, 3], [0, 2], [0, 2], [0, 2], [0, 3], [0, 3]],
+  [[3, 5], [2, 5], [2, 5], [2, 4], [3, 5], [3, 5]],
+  [[5, 7], [5, 7], [5, 7], [4, 7], [5, 8], [5, 7]],
+  [[7, 10], [7, 10], [7, 9], [7, 9], [8, 10], [7, 10]],
+  [[10, 12], [10, 12], [9, 12], [9, 12], [10, 12], [10, 12]],
+];
+
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // STATE
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -896,6 +1002,68 @@ function shuffled(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+// â”€â”€ Pentatonic box patterns (Scale Practice) â”€â”€
+
+// The pentatonic root the box shapes are anchored on. Minor Pentatonic uses the
+// scale root directly; Major Pentatonic shares the same five shapes anchored on
+// its relative minor (root + 9). Any other scale: no boxes.
+function pentaBoxEffRoot() {
+  if (S.scale === 'Minor Pentatonic') return S.root;
+  if (S.scale === 'Major Pentatonic') return (S.root + 9) % 12;
+  return null;
+}
+
+// Every fully-on-board instance of the five shapes for `effRoot`, as
+// { pattern: 1..5, keys: [pk...] }. A shape recurs at each low-E root fret.
+function buildPentaBoxes(effRoot) {
+  if (effRoot == null) return [];
+  // Every low-E fret sounding the root, plus one octave below — a shape whose
+  // origin sits just off the nut (e.g. pattern 5 for D#) can still land fully
+  // on the board. Off-board cells are filtered per instance below.
+  const anchorSet = new Set();
+  for (let f = 0; f <= MAX_FRET; f++) {
+    if (noteAt(0, f) === effRoot) { anchorSet.add(f - 12); anchorSet.add(f); }
+  }
+  const anchors = [...anchorSet];
+
+  const boxes = [];
+  PENTA_BOX_OFFSETS.forEach((shape, bi) => {
+    anchors.forEach(rf => {
+      const keys = [];
+      let onBoard = true;
+      for (let s = 0; s < 6 && onBoard; s++) {
+        for (const off of shape[s]) {
+          const f = rf + off;
+          if (f < 0 || f > MAX_FRET) { onBoard = false; break; }
+          keys.push(pk(s, f));
+        }
+      }
+      if (onBoard) boxes.push({ pattern: bi + 1, keys, cells: new Set(keys) });
+    });
+  });
+  return boxes;
+}
+
+// Convex hull (Andrew's monotone chain) of [x,y] points, collinear points dropped.
+function convexHull(points) {
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop(); upper.pop();
+  return lower.concat(upper);
 }
 
 
@@ -1002,6 +1170,18 @@ function buildFretboard() {
       attachPeekHold(cell, s, f);
     }
   }
+
+  // Overlay layer for the Scale Practice pattern flourish (drawn above the
+  // strings and note labels; see #pattern-overlay z-index).
+  const ov = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  ov.setAttribute('id', 'pattern-overlay');
+  ov.setAttribute('aria-hidden', 'true');
+  fb.appendChild(ov);
+}
+
+function clearPatternOverlay() {
+  const ov = document.getElementById('pattern-overlay');
+  if (ov) ov.innerHTML = '';
 }
 
 // â”€â”€ Press-and-hold to peek at the underlying note â”€â”€
@@ -1228,6 +1408,7 @@ function styleAllNoteId() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGame() {
+  clearPatternOverlay();
   if (S.gameType === 'notehunt')    startNoteHunt();
   else if (S.gameType === 'noteid') startNoteId();
   else                                startScaleGame();
@@ -1251,9 +1432,15 @@ function completeRound() {
 
 function startScaleGame() {
   const scalePos = buildScalePositions(S.root, S.scale);
-  S.game = { scalePos, correct: new Set(), wrongPos: new Set(), wrongCount: 0 };
+  S.game = {
+    scalePos, correct: new Set(), wrongPos: new Set(), wrongCount: 0,
+    boxes: buildPentaBoxes(pentaBoxEffRoot()), // [] unless a 5-note pentatonic
+    boxDone: new Set(),                         // box-instance indices already flashed
+    patternsCleared: new Set(),                 // pattern numbers 1..5 ever cleared
+  };
   S.mode = 'playing';
   document.getElementById('overlay').classList.add('hidden');
+  clearPatternOverlay();
   styleAll();
   refreshUI();
 }
@@ -1271,6 +1458,8 @@ function onTapScale(s, f) {
     d.style.setProperty('--nc', col);
     setDotClass(d, noteAt(s, f) === S.root ? 'g-ok root' : 'g-ok', col);
     setDotText(d, NOTES[noteAt(s, f)]); // reveal what was found, even with notes hidden
+
+    if (g.boxes.length) checkPentaBoxes(s, f);
 
     if (g.correct.size === g.scalePos.size) { endScaleRound(); return; }
   } else {
@@ -1297,6 +1486,105 @@ function endScaleRound() {
   styleAll();
   showScaleResult(roundScore);
   refreshUI();
+  // Any in-flight flourish is left to finish and self-remove behind the result
+  // card; startGame / goToMainScreen clear the overlay before the next round.
+}
+
+// â”€â”€ Scale Practice: pentatonic box patterns â”€â”€
+
+// After a correct tap at (s, f), fire the flourish for any box instance that
+// this tap just completed.
+function checkPentaBoxes(s, f) {
+  const g = S.game;
+  const key = pk(s, f);
+  g.boxes.forEach((box, i) => {
+    if (g.boxDone.has(i) || !box.cells.has(key)) return;
+    if (box.keys.every(k => g.correct.has(k))) {
+      g.boxDone.add(i);
+      g.patternsCleared.add(box.pattern);
+      flashPattern(box);
+      refreshPatternTracker();
+      const pip = document.querySelector(`#pattern-tracker .pt-pip[data-pattern="${box.pattern}"]`);
+      if (pip) {
+        pip.classList.add('just-done');
+        setTimeout(() => pip.classList.remove('just-done'), 500);
+      }
+    }
+  });
+}
+
+// Sweep a gold outline around a completed box, then let it fade (CSS handles
+// the animation; the nodes remove themselves on animationend).
+function flashPattern(box) {
+  const fb = document.getElementById('fretboard');
+  const ov = document.getElementById('pattern-overlay');
+  if (!fb || !ov) return;
+
+  const fbr = fb.getBoundingClientRect();
+  const ox  = fbr.left + fb.clientLeft;
+  const oy  = fbr.top  + fb.clientTop;
+  const pts = [];
+  box.keys.forEach(k => {
+    const el = fb.querySelector(`.scell[data-s="${Math.floor(k / 100)}"][data-f="${k % 100}"]`);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const x = r.left - ox, y = r.top - oy;
+    pts.push([x, y], [x + r.width, y], [x + r.width, y + r.height], [x, y + r.height]);
+  });
+  if (pts.length < 3) return;
+
+  const hull = convexHull(pts);
+  const cx = hull.reduce((a, p) => a + p[0], 0) / hull.length;
+  const cy = hull.reduce((a, p) => a + p[1], 0) / hull.length;
+  const inf = hull.map(([x, y]) => {
+    const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
+    return [x + dx / d * 10, y + dy / d * 10];
+  });
+  const dAttr = 'M' + inf.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L') + 'Z';
+
+  ov.setAttribute('viewBox', `0 0 ${fb.clientWidth} ${fb.clientHeight}`);
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', dAttr);
+  path.setAttribute('class', 'pattern-flourish');
+  ov.appendChild(path);
+  const len = path.getTotalLength();
+  path.style.setProperty('--len', len);
+  path.style.strokeDasharray = len;
+  path.addEventListener('animationend', e => {
+    if (e.animationName === 'patternGlowOut') path.remove();
+  });
+
+  const top = inf.reduce((a, p) => (p[1] < a[1] ? p : a), inf[0]);
+  const tag = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  tag.setAttribute('x', top[0].toFixed(1));
+  tag.setAttribute('y', (top[1] - 7).toFixed(1));
+  tag.setAttribute('class', 'pattern-flourish-tag');
+  tag.textContent = `Pattern ${box.pattern}`;
+  ov.appendChild(tag);
+  tag.addEventListener('animationend', () => tag.remove());
+}
+
+function refreshPatternTracker() {
+  const g  = S.game;
+  const tr = document.getElementById('pattern-tracker');
+  const on = S.gameType === 'scale' && S.mode === 'playing' &&
+             g && g.boxes && g.boxes.length > 0;
+  tr.classList.toggle('hide', !on);
+  if (!on) return;
+  for (let p = 1; p <= 5; p++) {
+    tr.querySelector(`.pt-pip[data-pattern="${p}"]`)
+      .classList.toggle('done', g.patternsCleared.has(p));
+  }
+}
+
+// Re-play the flourish for a cleared pattern when its pip is clicked.
+function replayPattern(pattern) {
+  const g = S.game;
+  if (!g || !g.boxes) return;
+  g.boxes.forEach((box, i) => {
+    if (box.pattern === pattern && g.boxDone.has(i)) flashPattern(box);
+  });
 }
 
 // â”€â”€ Note Hunt mode â”€â”€
@@ -1600,6 +1888,7 @@ function refreshUI() {
   document.getElementById('accuracy-toggle').checked = S.showAccuracy;
   document.getElementById('scale-notes-wrap').classList.toggle('hide', gameType !== 'scale');
   document.getElementById('scale-notes-toggle').checked = S.showScaleNotes;
+  refreshPatternTracker();
 
   if (mode === 'playing') {
     startBtn.textContent = '\u21BA Restart';
@@ -1934,6 +2223,7 @@ document.getElementById('mode-sel').addEventListener('change', e => {
   S.gameType = e.target.value;
   S.mode = 'browse';
   S.game = null;
+  clearPatternOverlay();
   styleAll();
   refreshUI();
 });
@@ -1969,6 +2259,11 @@ document.getElementById('scale-notes-toggle').addEventListener('change', e => {
   styleAll();
 });
 
+document.getElementById('pattern-tracker').addEventListener('click', e => {
+  const pip = e.target.closest('.pt-pip.done');
+  if (pip) replayPattern(parseInt(pip.dataset.pattern, 10));
+});
+
 document.getElementById('start-btn').addEventListener('click', startGame);
 
 document.getElementById('complete-btn').addEventListener('click', completeRound);
@@ -1979,6 +2274,7 @@ function goToMainScreen() {
   document.getElementById('overlay').classList.add('hidden');
   S.mode = 'browse';
   S.game = null;
+  clearPatternOverlay();
   styleAll();
   refreshUI();
 }
