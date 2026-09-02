@@ -728,6 +728,11 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
     <input type="checkbox" id="accuracy-toggle">
     <span class="switch-track"><span class="switch-thumb"></span></span>
   </label>
+  <label class="switch-inline hide" id="scale-notes-wrap">
+    <span class="switch-inline-text">Show Notes</span>
+    <input type="checkbox" id="scale-notes-toggle" checked>
+    <span class="switch-track"><span class="switch-thumb"></span></span>
+  </label>
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
 
@@ -844,6 +849,7 @@ let S = {
   gameType: 'scale',    // 'scale' | 'notehunt' | 'noteid'
   root: 4,              // E
   scale: 'Natural Minor',
+  showScaleNotes: true, // Scale Practice: show the note name on every fret while playing
   showAllNotes: false,  // Note ID: reveal every note label as a helper
   showAccuracy: false,  // Note ID: overlay per-cell historical accuracy on the board
   game: null,
@@ -1086,7 +1092,12 @@ function styleAllScale() {
       const key = pk(s, f);
       const inScale = scalePosSet.has(key);
       d.style.setProperty('--nc', col);
-      setDotText(d, NOTES[ni]);
+      // "Show Notes" toggle: while playing, labels can be hidden so the drill
+      // also tests note-position recall. Cells already tapped stay revealed, and
+      // browse/result views always show every name.
+      const labelShown = mode !== 'playing' || S.showScaleNotes
+        || (game && (game.correct.has(key) || game.wrongPos.has(key)));
+      setDotText(d, labelShown ? NOTES[ni] : '');
 
       if (mode === 'browse') {
         if (inScale) {
@@ -1253,6 +1264,7 @@ function onTapScale(s, f) {
     const col = NOTE_COLORS[noteAt(s, f)];
     d.style.setProperty('--nc', col);
     setDotClass(d, 'g-ok', col);
+    setDotText(d, NOTES[noteAt(s, f)]); // reveal what was found, even with notes hidden
 
     if (g.correct.size === g.scalePos.size) { endScaleRound(); return; }
   } else {
@@ -1580,6 +1592,8 @@ function refreshUI() {
   document.getElementById('show-notes-toggle').checked = S.showAllNotes;
   document.getElementById('accuracy-wrap').classList.toggle('hide', gameType !== 'noteid');
   document.getElementById('accuracy-toggle').checked = S.showAccuracy;
+  document.getElementById('scale-notes-wrap').classList.toggle('hide', gameType !== 'scale');
+  document.getElementById('scale-notes-toggle').checked = S.showScaleNotes;
 
   if (mode === 'playing') {
     startBtn.textContent = '\u21BA Restart';
@@ -1941,6 +1955,11 @@ document.getElementById('show-notes-toggle').addEventListener('change', e => {
 
 document.getElementById('accuracy-toggle').addEventListener('change', e => {
   S.showAccuracy = e.target.checked;
+  styleAll();
+});
+
+document.getElementById('scale-notes-toggle').addEventListener('change', e => {
+  S.showScaleNotes = e.target.checked;
   styleAll();
 });
 
