@@ -638,19 +638,50 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .rc-rank span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
 
-/* Note ID: prominent leaderboard-rank banner above the score stats */
+/* Note ID: prominent stat banners (rank, avg time) above the score stats */
+.rc-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 16px;
+}
+.rc-banners.hide { display: none; }
 .rc-rank-banner {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin: 6px 0 16px;
   padding: 11px 18px;
   border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--border);
 }
 .rc-rank-banner.hide { display: none; }
+.rc-stat-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.rc-stat-banner.hide { display: none; }
+.rsb-value {
+  font-family: 'Big Shoulders Display', 'Hanken Grotesk', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--gold);
+  line-height: 1.1;
+}
+.rsb-label {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-dim);
+}
 .rrb-medal { font-size: 2.1rem; line-height: 1; }
 .rrb-medal.hide { display: none; }
 .rrb-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.12; }
@@ -895,11 +926,17 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
     <div class="rc-emoji"  id="rc-emoji">&#127881;</div>
     <div class="rc-title"  id="rc-title">Round Complete!</div>
     <div class="rc-scale"  id="rc-scale">E Natural Minor</div>
-    <div class="rc-rank-banner hide" id="rc-rank-banner">
-      <span class="rrb-medal" id="rrb-medal">&#129351;</span>
-      <div class="rrb-text">
-        <span class="rrb-rank" id="rrb-rank">#1</span>
-        <span class="rrb-of" id="rrb-of">of 12 rounds</span>
+    <div class="rc-banners hide" id="rc-banners">
+      <div class="rc-rank-banner" id="rc-rank-banner">
+        <span class="rrb-medal" id="rrb-medal">&#129351;</span>
+        <div class="rrb-text">
+          <span class="rrb-rank" id="rrb-rank">#1</span>
+          <span class="rrb-of" id="rrb-of">of 12 rounds</span>
+        </div>
+      </div>
+      <div class="rc-stat-banner hide" id="rc-time-banner">
+        <span class="rsb-value" id="rc-time-big">3.3s</span>
+        <span class="rsb-label">Avg time to identify</span>
       </div>
     </div>
     <div class="rc-stats">
@@ -908,7 +945,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
     <div class="rc-session">Session total: <span id="rc-session">0</span></div>
-    <div class="rc-time hide" id="rc-time"><span id="rc-time-lbl">Avg time to identify:</span> <span id="rc-time-val">0.0s</span></div>
+    <div class="rc-time hide" id="rc-time"><span id="rc-time-lbl">Time:</span> <span id="rc-time-val">0.0s</span></div>
     <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
     <div class="rc-time hide" id="rc-nopoint">Notes shown (no points): <span id="rc-nopoint-val">0</span></div>
     <button class="lb-link hide" id="rc-lb-btn" type="button">View full leaderboard &rarr;</button>
@@ -2072,7 +2109,7 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-session').textContent = S.session.score;
   document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('rc-nopoint').classList.add('hide');
-  document.getElementById('rc-rank-banner').classList.add('hide');
+  document.getElementById('rc-banners').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
 
   const rcTime = document.getElementById('rc-time');
@@ -2109,7 +2146,7 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-time').classList.add('hide');
   document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('rc-nopoint').classList.add('hide');
-  document.getElementById('rc-rank-banner').classList.add('hide');
+  document.getElementById('rc-banners').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
   document.getElementById('overlay').classList.remove('hidden');
 }
@@ -2131,13 +2168,13 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
   document.getElementById('rc-session').textContent = S.session.score;
 
   const avg = noteIdAvgTime(g);
-  const rcTime = document.getElementById('rc-time');
+  const timeBanner = document.getElementById('rc-time-banner');
+  document.getElementById('rc-time').classList.add('hide'); // Note ID uses the banner, not the inline line
   if (avg === null) {
-    rcTime.classList.add('hide');
+    timeBanner.classList.add('hide');
   } else {
-    rcTime.classList.remove('hide');
-    document.getElementById('rc-time-lbl').textContent = 'Avg time to identify:';
-    document.getElementById('rc-time-val').textContent = `${avg.toFixed(1)}s`;
+    document.getElementById('rc-time-big').textContent = `${avg.toFixed(1)}s`;
+    timeBanner.classList.remove('hide');
   }
 
   const rcSpeed = document.getElementById('rc-speed');
@@ -2173,6 +2210,9 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
   } else {
     banner.classList.add('hide');
   }
+
+  document.getElementById('rc-banners').classList.toggle('hide',
+    banner.classList.contains('hide') && timeBanner.classList.contains('hide'));
 
   document.getElementById('overlay').classList.remove('hidden');
 }
