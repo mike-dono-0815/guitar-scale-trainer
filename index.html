@@ -869,6 +869,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
     <label for="scale-sel">Scale</label>
     <select id="scale-sel"></select>
   </div>
+  <button class="btn btn-secondary" id="random-scale-btn" title="Pick a random key and scale">&#127922; Random</button>
   <button class="btn btn-primary" id="start-btn">&#9654; Start Game</button>
   <button class="btn btn-secondary" id="leaderboard-btn">&#127942; Note ID Leaderboard</button>
 </div>
@@ -2010,6 +2011,7 @@ function refreshUI() {
   modeSel.disabled = (mode === 'playing');
   keyGroup.classList.toggle('hide', gameType !== 'scale');
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
+  document.getElementById('random-scale-btn').classList.toggle('hide', gameType !== 'scale' || mode === 'playing');
   targetPill.classList.toggle('hide', gameType !== 'notehunt');
   progPill.classList.toggle('hide', gameType === 'scale');
   timePill.classList.toggle('hide',
@@ -2394,6 +2396,20 @@ document.getElementById('key-sel').addEventListener('change', e => {
 document.getElementById('scale-sel').addEventListener('change', e => {
   S.scale = e.target.value;
   if (S.mode !== 'playing') { S.mode = 'browse'; styleAll(); }
+});
+
+document.getElementById('random-scale-btn').addEventListener('click', () => {
+  if (S.mode === 'playing') return;
+  const scaleNames = Object.keys(SCALES);
+  const before = `${S.root}|${S.scale}`;
+  do {
+    S.root  = Math.floor(Math.random() * 12);
+    S.scale = scaleNames[Math.floor(Math.random() * scaleNames.length)];
+  } while (`${S.root}|${S.scale}` === before); // always land on something new
+  document.getElementById('key-sel').value   = S.root;
+  document.getElementById('scale-sel').value = S.scale;
+  S.mode = 'browse';
+  styleAll();
 });
 
 document.getElementById('show-notes-toggle').addEventListener('change', e => {
