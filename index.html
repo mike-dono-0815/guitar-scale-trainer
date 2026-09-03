@@ -630,10 +630,22 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .rcs.s .v { color: var(--gold); }
 .rcs.f .v { color: var(--green); }
 .rcs.w .v { color: var(--red); }
-.rc-session { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
-.rc-session span { color: var(--gold); font-weight: 700; }
 .rc-time { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
 .rc-time span { color: var(--gold); font-weight: 700; }
+
+/* Points breakdown: "standard + speed bonus = total" */
+.rc-equation {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 18px;
+}
+.rc-equation.hide { display: none; }
+.rc-equation .eq-standard { color: var(--text); font-weight: 500; }
+.rc-equation .eq-speed { color: var(--green); font-weight: 500; }
+.rc-equation .eq-total { color: var(--gold); font-weight: 700; }
+.rc-equation .eq-op { color: var(--text-dim); margin: 0 3px; }
 .rc-rank { font-size: 0.82rem; color: var(--text-dim); margin-bottom: 6px; }
 .rc-rank span { color: var(--gold); font-weight: 700; }
 .rc-btns { display: flex; gap: 10px; justify-content: center; }
@@ -841,10 +853,6 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   <div class="header-title" id="header-title">Guitar Scale Trainer</div>
   <div class="header-scores">
     <div class="score-block">
-      <span class="lbl">Session</span>
-      <span class="val" id="session-val">0</span>
-    </div>
-    <div class="score-block">
       <span class="lbl">Rounds</span>
       <span class="val" id="rounds-val">0</span>
     </div>
@@ -937,7 +945,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
       </div>
       <div class="rc-stat-banner hide" id="rc-time-banner">
         <span class="rsb-value" id="rc-time-big">3.3s</span>
-        <span class="rsb-label">Avg time to identify</span>
+        <span class="rsb-label" id="rc-time-banner-lbl">Avg time to identify</span>
       </div>
     </div>
     <div class="rc-stats">
@@ -945,9 +953,13 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
       <div class="rcs f"><div class="v" id="rc-found">0/0</div><div class="l" id="rc-found-lbl">Found</div></div>
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
-    <div class="rc-session">Session total: <span id="rc-session">0</span></div>
-    <div class="rc-time hide" id="rc-time"><span id="rc-time-lbl">Time:</span> <span id="rc-time-val">0.0s</span></div>
-    <div class="rc-time hide" id="rc-speed">Speed bonus: <span id="rc-speed-val">+0</span></div>
+    <div class="rc-equation hide" id="rc-equation">
+      <span class="eq-standard" id="rc-eq-standard">0</span> standard
+      <span class="eq-op">+</span>
+      <span class="eq-speed" id="rc-eq-speed">0</span> speed bonus
+      <span class="eq-op">=</span>
+      <span class="eq-total" id="rc-eq-total">0</span> points
+    </div>
     <div class="rc-time hide" id="rc-nopoint">Notes shown (no points): <span id="rc-nopoint-val">0</span></div>
     <button class="lb-link hide" id="rc-lb-btn" type="button">View full leaderboard &rarr;</button>
     <div class="rc-btns">
@@ -1994,7 +2006,6 @@ function endNoteIdRound() {
 
 function refreshUI() {
   const { mode, gameType, session } = S;
-  document.getElementById('session-val').textContent = session.score;
   document.getElementById('rounds-val').textContent  = session.rounds;
 
   const startBtn    = document.getElementById('start-btn');
@@ -2091,6 +2102,16 @@ function refreshGameBar() {
   }
 }
 
+// Render the "standard + speed bonus = total" points breakdown on the result
+// card. `standard` is the non-speed part of the score; when a floor clamp kicks
+// in the printed total is the clamped round score.
+function showScoreEquation(standard, speedBonus, total) {
+  document.getElementById('rc-eq-standard').textContent = standard;
+  document.getElementById('rc-eq-speed').textContent = speedBonus;
+  document.getElementById('rc-eq-total').textContent = total;
+  document.getElementById('rc-equation').classList.remove('hide');
+}
+
 function showScaleResult(roundScore) {
   const g     = S.game;
   const total = g.scalePos.size;
@@ -2108,24 +2129,24 @@ function showScaleResult(roundScore) {
   document.getElementById('rc-found-lbl').textContent = 'Found';
   document.getElementById('rc-found').textContent = `${found}/${total}`;
   document.getElementById('rc-wrong').textContent = wrong;
-  document.getElementById('rc-session').textContent = S.session.score;
-  document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('rc-nopoint').classList.add('hide');
-  document.getElementById('rc-banners').classList.add('hide');
+  document.getElementById('rc-rank-banner').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
 
-  const rcTime = document.getElementById('rc-time');
+  showScoreEquation(Math.max(0, 100 - wrong * 10), g.speedBonus, roundScore);
+
+  // Show the finish time in the same prominent banner Note ID uses for its
+  // average identify time.
+  const timeBanner = document.getElementById('rc-time-banner');
   if (g.elapsed > 0) {
-    document.getElementById('rc-time-lbl').textContent = 'Time:';
-    document.getElementById('rc-time-val').textContent = fmtClock(g.elapsed);
-    rcTime.classList.remove('hide');
+    document.getElementById('rc-time-big').textContent = fmtClock(g.elapsed);
+    document.getElementById('rc-time-banner-lbl').textContent = 'Time';
+    timeBanner.classList.remove('hide');
   } else {
-    rcTime.classList.add('hide');
+    timeBanner.classList.add('hide');
   }
-  if (g.speedBonus > 0) {
-    document.getElementById('rc-speed-val').textContent = `+${g.speedBonus}`;
-    document.getElementById('rc-speed').classList.remove('hide');
-  }
+  document.getElementById('rc-banners').classList.toggle('hide',
+    timeBanner.classList.contains('hide'));
 
   document.getElementById('overlay').classList.remove('hidden');
 }
@@ -2144,12 +2165,13 @@ function showNoteHuntResult(roundScore) {
   document.getElementById('rc-found-lbl').textContent = 'Notes';
   document.getElementById('rc-found').textContent = `${g.notesDone}/${g.order.length}`;
   document.getElementById('rc-wrong').textContent = wrong;
-  document.getElementById('rc-session').textContent = S.session.score;
-  document.getElementById('rc-time').classList.add('hide');
-  document.getElementById('rc-speed').classList.add('hide');
   document.getElementById('rc-nopoint').classList.add('hide');
+  document.getElementById('rc-rank-banner').classList.add('hide');
+  document.getElementById('rc-time-banner').classList.add('hide');
   document.getElementById('rc-banners').classList.add('hide');
   document.getElementById('rc-lb-btn').classList.add('hide');
+  // Note Hunt has no speed bonus — the whole score is the standard part.
+  showScoreEquation(roundScore, 0, roundScore);
   document.getElementById('overlay').classList.remove('hidden');
 }
 
@@ -2167,25 +2189,18 @@ function showNoteIdResult(roundScore, speedBonus, standing) {
   document.getElementById('rc-found-lbl').textContent = 'Correct';
   document.getElementById('rc-found').textContent = `${g.correct}/${g.total}`;
   document.getElementById('rc-wrong').textContent = g.wrongCount;
-  document.getElementById('rc-session').textContent = S.session.score;
 
   const avg = noteIdAvgTime(g);
   const timeBanner = document.getElementById('rc-time-banner');
-  document.getElementById('rc-time').classList.add('hide'); // Note ID uses the banner, not the inline line
   if (avg === null) {
     timeBanner.classList.add('hide');
   } else {
     document.getElementById('rc-time-big').textContent = `${avg.toFixed(1)}s`;
+    document.getElementById('rc-time-banner-lbl').textContent = 'Avg time to identify';
     timeBanner.classList.remove('hide');
   }
 
-  const rcSpeed = document.getElementById('rc-speed');
-  if (speedBonus > 0) {
-    rcSpeed.classList.remove('hide');
-    document.getElementById('rc-speed-val').textContent = `+${speedBonus}`;
-  } else {
-    rcSpeed.classList.add('hide');
-  }
+  showScoreEquation(g.correct * 10 - g.wrongCount * 5, speedBonus, roundScore);
 
   const rcNoPoint = document.getElementById('rc-nopoint');
   if (g.noPointCount > 0) {
