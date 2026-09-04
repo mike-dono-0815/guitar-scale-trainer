@@ -209,7 +209,6 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .pill-found { background: rgba(99,192,112,0.13); color: #7ed48c; border: 1px solid rgba(99,192,112,0.32); }
 .pill-wrong { background: rgba(229,84,74,0.13); color: #f08a80; border: 1px solid rgba(229,84,74,0.32); }
 .pill-progress { background: var(--panel); color: var(--text-dim); border: 1px solid var(--border); }
-.pill-target { color: #fff; font-weight: 700; }
 .pill-time { background: var(--panel); color: var(--gold); border: 1px solid var(--border); }
 #complete-btn { margin-left: auto; }
 
@@ -813,6 +812,39 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   box-shadow: 0 0 0 3px #fff, 0 0 16px #d9a441;
 }
 
+/* â”€â”€ Target note (Note Hunt mode) â”€â”€ */
+.note-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.note-target.hide { display: none; }
+.nt-label {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.nt-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 0 8px var(--nc);
+  background: var(--nc);
+}
+
 /* â”€â”€ Color Legend â”€â”€ */
 .legend {
   display: flex;
@@ -884,7 +916,6 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 
 <!-- Game status bar -->
 <div class="game-bar hidden" id="game-bar">
-  <span class="pill pill-target hide" id="target-pill">Find: <span id="target-note-txt"></span></span>
   <span class="pill pill-found" id="found-pill">Found: 0 / 0</span>
   <span class="pill pill-progress hide" id="progress-pill">Note 0 / 12</span>
   <span class="pill pill-wrong" id="wrong-pill">0 mistakes</span>
@@ -918,6 +949,12 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 <!-- Fretboard -->
 <div class="fretboard-outer">
   <div class="fretboard" id="fretboard"></div>
+</div>
+
+<!-- Target note (Note Hunt mode) -->
+<div class="note-target hide" id="note-target">
+  <span class="nt-label">Find</span>
+  <span class="nt-note" id="nt-note"></span>
 </div>
 
 <!-- Note picker (Note ID mode) -->
@@ -2013,7 +2050,7 @@ function refreshUI() {
   const modeSel     = document.getElementById('mode-sel');
   const keyGroup    = document.getElementById('key-group');
   const scaleGroup  = document.getElementById('scale-group');
-  const targetPill  = document.getElementById('target-pill');
+  const noteTarget  = document.getElementById('note-target');
   const progPill    = document.getElementById('progress-pill');
   const timePill    = document.getElementById('time-pill');
   const notePicker  = document.getElementById('note-picker');
@@ -2023,7 +2060,7 @@ function refreshUI() {
   keyGroup.classList.toggle('hide', gameType !== 'scale');
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
   document.getElementById('random-scale-btn').classList.toggle('hide', gameType !== 'scale' || mode === 'playing');
-  targetPill.classList.toggle('hide', gameType !== 'notehunt');
+  noteTarget.classList.toggle('hide', !(gameType === 'notehunt' && mode === 'playing'));
   progPill.classList.toggle('hide', gameType === 'scale');
   timePill.classList.toggle('hide',
     !(gameType === 'noteid' || (gameType === 'scale' && mode === 'playing')));
@@ -2048,24 +2085,29 @@ function refreshUI() {
   alignNotePicker();
 }
 
-// Center the Note ID picker strip under the fretboard rather than under the
-// whole window. On desktop the full board is left-aligned inside a wider
-// viewport, so a window-centered strip drifts right of the board it belongs to.
+// Center the Note ID picker / Note Hunt target strip under the fretboard rather
+// than under the whole window. On desktop the full board is left-aligned inside
+// a wider viewport, so a window-centered strip drifts right of the board it
+// belongs to.
 function alignNotePicker() {
-  const picker = document.getElementById('note-picker');
-  const outer  = document.querySelector('.fretboard-outer');
-  const board  = document.getElementById('fretboard');
-  picker.style.maxWidth = '';
-  picker.style.marginLeft = '';
-  if (picker.classList.contains('hide')) return;
+  const outer = document.querySelector('.fretboard-outer');
+  const board = document.getElementById('fretboard');
+  const boardFits = board.scrollWidth <= outer.clientWidth;
+  const offset = board.getBoundingClientRect().left - outer.getBoundingClientRect().left;
+  const width  = board.getBoundingClientRect().width + 'px';
 
-  // Only realign when the entire board is on screen; if it scrolls, the strip's
-  // default full-width centering already matches the visible board.
-  if (board.scrollWidth <= outer.clientWidth) {
-    const offset = board.getBoundingClientRect().left - outer.getBoundingClientRect().left;
-    picker.style.maxWidth   = board.getBoundingClientRect().width + 'px';
-    picker.style.marginLeft = offset + 'px';
-  }
+  ['note-picker', 'note-target'].forEach(id => {
+    const strip = document.getElementById(id);
+    strip.style.maxWidth = '';
+    strip.style.marginLeft = '';
+    if (strip.classList.contains('hide')) return;
+    // Only realign when the entire board is on screen; if it scrolls, the
+    // strip's default full-width centering already matches the visible board.
+    if (boardFits) {
+      strip.style.maxWidth   = width;
+      strip.style.marginLeft = offset + 'px';
+    }
+  });
 }
 
 window.addEventListener('resize', alignNotePicker);
@@ -2077,10 +2119,9 @@ function refreshGameBar() {
     `${w} mistake${w !== 1 ? 's' : ''}`;
 
   if (S.gameType === 'notehunt') {
-    const swatch = NOTE_COLORS[g.target];
-    const targetTxt = document.getElementById('target-note-txt');
-    targetTxt.textContent = NOTES[g.target];
-    document.getElementById('target-pill').style.background = swatch;
+    const ntNote = document.getElementById('nt-note');
+    ntNote.textContent = NOTES[g.target];
+    ntNote.style.setProperty('--nc', NOTE_COLORS[g.target]);
     const foundForTarget = [...g.positions].filter(k => g.found.has(k)).length;
     document.getElementById('found-pill').textContent =
       `Found: ${foundForTarget} / ${g.positions.size}`;
