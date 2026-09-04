@@ -633,7 +633,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 .rc-time { font-size: 0.78rem; color: var(--text-dim); margin-bottom: 18px; }
 .rc-time span { color: var(--gold); font-weight: 700; }
 
-/* Points breakdown: "standard + speed bonus = total" */
+/* Points breakdown: "base + speed bonus = total" */
 .rc-equation {
   font-family: 'DM Mono', ui-monospace, monospace;
   font-size: 0.82rem;
@@ -954,7 +954,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
       <div class="rcs w"><div class="v" id="rc-wrong">0</div><div class="l">Mistakes</div></div>
     </div>
     <div class="rc-equation hide" id="rc-equation">
-      <span class="eq-standard" id="rc-eq-standard">0</span> standard
+      <span class="eq-standard" id="rc-eq-standard">0</span>
       <span class="eq-op">+</span>
       <span class="eq-speed" id="rc-eq-speed">0</span> speed bonus
       <span class="eq-op">=</span>
@@ -2102,7 +2102,7 @@ function refreshGameBar() {
   }
 }
 
-// Render the "standard + speed bonus = total" points breakdown on the result
+// Render the "base + speed bonus = total" points breakdown on the result
 // card. `standard` is the non-speed part of the score; when a floor clamp kicks
 // in the printed total is the clamped round score.
 function showScoreEquation(standard, speedBonus, total) {
