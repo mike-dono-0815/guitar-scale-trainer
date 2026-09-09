@@ -589,6 +589,121 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 }
 
 
+/* â”€â”€ Board + side panel row â”€â”€ */
+.board-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.board-row .fretboard-outer { flex: 1 1 380px; min-width: 0; }
+
+/* Scale Practice: a second way to pick key + scale, sitting to the right of
+   the fretboard. Kept in sync with the header Key / Scale selects. */
+.board-side {
+  flex: 0 0 auto;
+  width: 210px;
+  margin: 18px 20px 18px 4px;
+  padding: 16px 14px 18px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+.board-side.hide { display: none; }
+.seg-field { width: 100%; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.seg-field > .seg-lbl {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.key-circle {
+  position: relative;
+  width: 178px;
+  height: 178px;
+  flex-shrink: 0;
+}
+.kc-center {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+  text-align: center;
+}
+.kc-center .kc-key-name {
+  font-family: 'Big Shoulders Display', 'Hanken Grotesk', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.kc-center .kc-scale-name {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.52rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  max-width: 88px;
+}
+.kc-key {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s;
+}
+.kc-key:hover  { transform: scale(1.13); z-index: 3; }
+.kc-key:active { transform: scale(0.95); }
+.kc-key.sel {
+  box-shadow: 0 0 0 2.5px var(--gold), 0 0 12px 2px rgba(233,168,62,0.7);
+  z-index: 2;
+}
+
+.seg {
+  display: flex;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.seg-btn {
+  flex: 1;
+  padding: 7px 4px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Hanken Grotesk', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.seg-btn:first-child { border-left: none; }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.on { background: var(--accent); color: #1d1307; }
+.seg-btn:focus-visible { outline: 2px solid var(--accent-h); outline-offset: -2px; }
+.seg.disabled { opacity: 0.4; pointer-events: none; }
+
 /* â”€â”€ Result Overlay â”€â”€ */
 .overlay {
   position: fixed;
@@ -871,6 +986,8 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   .header-title { font-size: 1.05rem; }
   .controls { padding: 10px 14px; gap: 8px; }
   .fretboard-outer { padding: 14px 14px 14px 14px; }
+  .board-side { width: auto; align-self: center; margin: 4px 14px 14px; }
+  .key-circle { width: 168px; height: 168px; }
   .ndot { width: 24px; height: 24px; }
   .nlbl { font-size: 0.54rem; }
   .scell[data-dot="acc-dot"] .nlbl { font-size: 0.44rem; }
@@ -947,8 +1064,38 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 </div>
 
 <!-- Fretboard -->
-<div class="fretboard-outer">
-  <div class="fretboard" id="fretboard"></div>
+<div class="board-row">
+  <div class="fretboard-outer">
+    <div class="fretboard" id="fretboard"></div>
+  </div>
+
+  <!-- Scale Practice: circle-of-keys + tonality / shape switches -->
+  <aside class="board-side hide" id="board-side">
+    <div class="seg-field">
+      <span class="seg-lbl">Key</span>
+      <div class="key-circle" id="key-circle">
+        <div class="kc-center">
+          <span class="kc-key-name" id="kc-key-name">E</span>
+          <span class="kc-scale-name" id="kc-scale-name">Natural Minor</span>
+        </div>
+      </div>
+    </div>
+    <div class="seg-field">
+      <span class="seg-lbl">Tonality</span>
+      <div class="seg" id="seg-tonality" role="group" aria-label="Tonality">
+        <button type="button" class="seg-btn" data-val="Major">Major</button>
+        <button type="button" class="seg-btn" data-val="Minor">Minor</button>
+        <button type="button" class="seg-btn" data-val="Blues">Blues</button>
+      </div>
+    </div>
+    <div class="seg-field">
+      <span class="seg-lbl">Shape</span>
+      <div class="seg" id="seg-shape" role="group" aria-label="Scale shape">
+        <button type="button" class="seg-btn" data-val="full">Full</button>
+        <button type="button" class="seg-btn" data-val="penta">Pentatonic</button>
+      </div>
+    </div>
+  </aside>
 </div>
 
 <!-- Target note (Note Hunt mode) -->
@@ -1066,6 +1213,22 @@ const PENTA_BASE = {
   'Major':         'Major Pentatonic',
   'Blues':         'Minor Pentatonic',
 };
+
+// Side-panel switches (Scale Practice) â†” SCALES key. "Blues" has no pentatonic
+// variant, so its Shape switch is locked to "full".
+const SCALE_TO_CONTROLS = {
+  'Major':            ['Major', 'full'],
+  'Natural Minor':    ['Minor', 'full'],
+  'Major Pentatonic': ['Major', 'penta'],
+  'Minor Pentatonic': ['Minor', 'penta'],
+  'Blues':            ['Blues', 'full'],
+};
+
+function scaleFromControls(tonality, shape) {
+  if (tonality === 'Blues') return 'Blues';
+  if (shape === 'penta') return tonality === 'Major' ? 'Major Pentatonic' : 'Minor Pentatonic';
+  return tonality === 'Major' ? 'Major' : 'Natural Minor';
+}
 
 // Fret position markers
 const MARKERS = {3:'s',5:'s',7:'s',9:'s',12:'d',15:'s',17:'s',19:'s',21:'s'};
@@ -1221,6 +1384,63 @@ function buildSelects() {
     if (name === S.scale) o.selected = true;
     ss.appendChild(o);
   });
+}
+
+// â”€â”€ Scale Practice side panel: circle of keys + tonality / shape switches â”€â”€
+
+function buildKeyCircle() {
+  const circle = document.getElementById('key-circle');
+  NOTES.forEach((n, i) => {
+    const ang = (-90 + i * 30) * Math.PI / 180; // C at 12 o'clock, clockwise
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'kc-key';
+    b.dataset.k = i;
+    b.textContent = n;
+    b.style.background = NOTE_COLORS[i];
+    b.style.left = `${50 + Math.cos(ang) * 40}%`;
+    b.style.top  = `${50 + Math.sin(ang) * 40}%`;
+    b.addEventListener('click', () => {
+      if (S.mode === 'playing') return;
+      setScaleSelection(i, S.scale);
+    });
+    circle.appendChild(b);
+  });
+}
+
+// Point S.root / S.scale (and the header selects) at a new selection, then
+// restyle. Shared by the header dropdowns, the Random button and the side panel.
+function setScaleSelection(root, scale) {
+  S.root  = root;
+  S.scale = scale;
+  const ks = document.getElementById('key-sel');
+  const ss = document.getElementById('scale-sel');
+  if (ks) ks.value = String(root);
+  if (ss) ss.value = scale;
+  if (S.mode !== 'playing') S.mode = 'browse';
+  styleAll();
+  syncScaleSideControls();
+}
+
+// Mirror the current S.root / S.scale onto the side panel widgets.
+function syncScaleSideControls() {
+  document.querySelectorAll('#key-circle .kc-key').forEach(b => {
+    b.classList.toggle('sel', parseInt(b.dataset.k, 10) === S.root);
+  });
+  const [ton, shape] = SCALE_TO_CONTROLS[S.scale] || ['Minor', 'full'];
+  const bluesLock = ton === 'Blues';
+
+  document.querySelectorAll('#seg-tonality .seg-btn').forEach(b => {
+    b.classList.toggle('on', b.dataset.val === ton);
+  });
+  const shapeSeg = document.getElementById('seg-shape');
+  shapeSeg.classList.toggle('disabled', bluesLock);
+  document.querySelectorAll('#seg-shape .seg-btn').forEach(b => {
+    b.classList.toggle('on', b.dataset.val === (bluesLock ? 'full' : shape));
+  });
+
+  document.getElementById('kc-key-name').textContent   = NOTES[S.root];
+  document.getElementById('kc-scale-name').textContent = S.scale;
 }
 
 function buildLegend() {
@@ -2059,6 +2279,9 @@ function refreshUI() {
   modeSel.disabled = (mode === 'playing');
   keyGroup.classList.toggle('hide', gameType !== 'scale');
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
+  document.getElementById('board-side').classList.toggle('hide',
+    !(gameType === 'scale' && mode !== 'playing'));
+  syncScaleSideControls();
   document.getElementById('random-scale-btn').classList.toggle('hide', gameType !== 'scale' || mode === 'playing');
   noteTarget.classList.toggle('hide', !(gameType === 'notehunt' && mode === 'playing'));
   progPill.classList.toggle('hide', gameType === 'scale');
@@ -2447,11 +2670,28 @@ document.getElementById('mode-sel').addEventListener('change', e => {
 document.getElementById('key-sel').addEventListener('change', e => {
   S.root = parseInt(e.target.value, 10);
   if (S.mode !== 'playing') { S.mode = 'browse'; styleAll(); }
+  syncScaleSideControls();
 });
 
 document.getElementById('scale-sel').addEventListener('change', e => {
   S.scale = e.target.value;
   if (S.mode !== 'playing') { S.mode = 'browse'; styleAll(); }
+  syncScaleSideControls();
+});
+
+document.getElementById('seg-tonality').addEventListener('click', e => {
+  const btn = e.target.closest('.seg-btn');
+  if (!btn || S.mode === 'playing') return;
+  const [, curShape] = SCALE_TO_CONTROLS[S.scale] || ['Minor', 'full'];
+  setScaleSelection(S.root, scaleFromControls(btn.dataset.val, curShape));
+});
+
+document.getElementById('seg-shape').addEventListener('click', e => {
+  const btn = e.target.closest('.seg-btn');
+  if (!btn || S.mode === 'playing') return;
+  const [curTon] = SCALE_TO_CONTROLS[S.scale] || ['Minor', 'full'];
+  if (curTon === 'Blues') return; // shape locked for Blues
+  setScaleSelection(S.root, scaleFromControls(curTon, btn.dataset.val));
 });
 
 document.getElementById('random-scale-btn').addEventListener('click', () => {
@@ -2466,6 +2706,7 @@ document.getElementById('random-scale-btn').addEventListener('click', () => {
   document.getElementById('scale-sel').value = S.scale;
   S.mode = 'browse';
   styleAll();
+  syncScaleSideControls();
 });
 
 document.getElementById('show-notes-toggle').addEventListener('change', e => {
@@ -2551,6 +2792,7 @@ document.getElementById('acc-clear').addEventListener('click', e => {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 buildSelects();
+buildKeyCircle();
 buildFretboard();
 buildLegend();
 buildNotePicker();
