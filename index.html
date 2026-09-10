@@ -513,10 +513,27 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   box-shadow: 0 0 9px var(--nc), 0 0 0 2px rgba(255,255,255,0.5);
 }
-/* Correctly found AND the scale's root — gold ring instead of white */
+/* The scale's root — deliberately loud so the key is unmistakable: bigger,
+   a thick gold ring, a wide amber glow, a bolder label, and lifted above its
+   neighbours so nothing clips the halo. Shared by browse / play / result. */
+.scell.is-root { z-index: 5; }
+.ndot.b-in.root,
 .ndot.g-ok.root,
 .ndot.r-found.root {
-  box-shadow: 0 0 9px var(--nc), 0 0 0 2.5px var(--gold), 0 0 13px 2px rgba(233,168,62,0.75);
+  border-color: #fff;
+  transform: scale(1.2);
+  box-shadow:
+    0 0 0 3px var(--gold),
+    0 0 0 5px rgba(20,14,6,0.9),
+    0 0 16px 4px rgba(233,168,62,0.95),
+    0 0 30px 8px rgba(233,168,62,0.5);
+}
+.scell:hover  .ndot.root { transform: scale(1.32); }
+.scell:active .ndot.root { transform: scale(1.12); }
+.scell.is-root .nlbl {
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-shadow: 0 0 3px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,0.9);
 }
 /* Game: wrong tap */
 .ndot.g-wrong {
@@ -1608,8 +1625,13 @@ function setDotClass(d, cls, bg) {
   d.className = 'ndot ' + cls;
   d.style.background = bg || '';
   d.style.boxShadow  = '';
-  // Mirror the state onto the cell so the label layer can tint itself.
-  if (d.parentElement) d.parentElement.dataset.dot = cls.split(' ')[0];
+  // Mirror the state onto the cell so the label layer can tint itself, and
+  // flag the root so the cell can lift itself above its neighbours.
+  if (d.parentElement) {
+    const parts = cls.split(' ');
+    d.parentElement.dataset.dot = parts[0];
+    d.parentElement.classList.toggle('is-root', parts.includes('root'));
+  }
 }
 
 function styleAll() {
@@ -1640,7 +1662,11 @@ function styleAllScale() {
       setDotText(d, labelShown ? NOTES[ni] : '');
 
       if (mode === 'browse') {
-        if (inScale) {
+        if (inScale && ni === root) {
+          // Loud root treatment lives in CSS (.ndot.b-in.root) — leave the
+          // inline box-shadow clear so that rule wins.
+          setDotClass(d, 'b-in root', col);
+        } else if (inScale) {
           setDotClass(d, 'b-in', col);
           const isExtra = pentaSet && !pentaSet.has(ni);
           d.style.boxShadow = isExtra
