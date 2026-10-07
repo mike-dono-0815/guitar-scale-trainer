@@ -283,6 +283,27 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   100%    { opacity: 0; }
 }
 
+/* Triads: a persistent outline around each of the three voicings, tagged
+   with its inversion. Lives on the same overlay layer as the box flourish. */
+.triad-outline {
+  fill: var(--gold);
+  fill-opacity: 0.07;
+  stroke: var(--gold);
+  stroke-opacity: 0.85;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.triad-tag {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  fill: var(--gold);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.7);
+  stroke-width: 3px;
+}
+
 /* Pattern tracker — five pips in the game bar; each lights gold when every
    note of that box shape has been found at least once this round. */
 .pattern-tracker { display: flex; align-items: center; gap: 5px; }
@@ -1039,6 +1060,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
       <option value="scale">Scale Practice</option>
       <option value="notehunt">Note Hunt</option>
       <option value="noteid">Note ID</option>
+      <option value="triads">Triads</option>
     </select>
   </div>
   <div class="ctrl-group" id="key-group">
@@ -1048,6 +1070,17 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   <div class="ctrl-group" id="scale-group">
     <label for="scale-sel">Scale</label>
     <select id="scale-sel"></select>
+  </div>
+  <div class="ctrl-group hide" id="triad-group">
+    <label for="triad-sel">Triad</label>
+    <select id="triad-sel">
+      <option value="Major">Major</option>
+      <option value="Minor">Minor</option>
+    </select>
+  </div>
+  <div class="ctrl-group hide" id="strings-group">
+    <label for="strings-sel">Strings</label>
+    <select id="strings-sel"></select>
   </div>
   <button class="btn btn-secondary" id="random-scale-btn" title="Pick a random key and scale">&#127922; Random</button>
   <button class="btn btn-primary" id="start-btn">&#9654; Start Game</button>
@@ -1103,7 +1136,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
         </div>
       </div>
     </div>
-    <div class="seg-field">
+    <div class="seg-field" id="field-tonality">
       <span class="seg-lbl">Tonality</span>
       <div class="seg" id="seg-tonality" role="group" aria-label="Tonality">
         <button type="button" class="seg-btn" data-val="Major">Major</button>
@@ -1111,12 +1144,23 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
         <button type="button" class="seg-btn" data-val="Blues">Blues</button>
       </div>
     </div>
-    <div class="seg-field">
+    <div class="seg-field" id="field-shape">
       <span class="seg-lbl">Shape</span>
       <div class="seg" id="seg-shape" role="group" aria-label="Scale shape">
         <button type="button" class="seg-btn" data-val="full">Full</button>
         <button type="button" class="seg-btn" data-val="penta">Pentatonic</button>
       </div>
+    </div>
+    <div class="seg-field hide" id="field-triad">
+      <span class="seg-lbl">Triad</span>
+      <div class="seg" id="seg-triad" role="group" aria-label="Triad quality">
+        <button type="button" class="seg-btn" data-val="Major">Major</button>
+        <button type="button" class="seg-btn" data-val="Minor">Minor</button>
+      </div>
+    </div>
+    <div class="seg-field hide" id="field-strings">
+      <span class="seg-lbl">Strings</span>
+      <div class="seg" id="seg-strings" role="group" aria-label="String set"></div>
     </div>
   </aside>
 </div>
@@ -1220,6 +1264,8 @@ const NOTE_COLORS = NOTES.map((_, i) => {
 // Standard tuning lowâ†’high: E A D G B e (semitones from C)
 const OPEN = [4, 9, 2, 7, 11, 4];
 const STRING_NAMES = ['E', 'A', 'D', 'G', 'B', 'e'];
+// Open-string pitches as MIDI numbers (E2 … E4), for ordering voicings by pitch.
+const OPEN_MIDI = [40, 45, 50, 55, 59, 64];
 
 
 const SCALES = {
@@ -1253,6 +1299,11 @@ function scaleFromControls(tonality, shape) {
   return tonality === 'Major' ? 'Major' : 'Natural Minor';
 }
 
+// Triads: the four adjacent three-string sets, keyed by their lowest string.
+const TRIAD_STRING_SETS = [0, 1, 2, 3].map(lo =>
+  ({ lo, label: STRING_NAMES.slice(lo, lo + 3).join(' ') }));
+const TRIAD_INVERSIONS = ['Root position', '1st inversion', '2nd inversion'];
+
 // Fret position markers
 const MARKERS = {3:'s',5:'s',7:'s',9:'s',12:'d',15:'s',17:'s',19:'s',21:'s'};
 
@@ -1278,9 +1329,11 @@ const PENTA_BOX_OFFSETS = [
 
 let S = {
   mode: 'browse',       // 'browse' | 'playing' | 'result'
-  gameType: 'scale',    // 'scale' | 'notehunt' | 'noteid'
+  gameType: 'scale',    // 'scale' | 'notehunt' | 'noteid' | 'triads'
   root: 4,              // E
   scale: 'Natural Minor',
+  triadQuality: 'Major', // Triads: 'Major' | 'Minor' (key shared with S.root)
+  triadLo: 3,           // Triads: lowest string of the set (3 = G B e)
   showScaleNotes: true, // Scale Practice: show the note name on every fret while playing
   showAllNotes: false,  // Note ID: reveal every note label as a helper
   showAccuracy: false,  // Note ID: overlay per-cell historical accuracy on the board
@@ -1365,6 +1418,45 @@ function buildPentaBoxes(effRoot) {
     });
   });
   return boxes;
+}
+
+// ── Triads ──
+
+// The three close-position voicings of a triad on three adjacent strings, one
+// per inversion, taken from the nut upwards. Each voicing stacks the tones
+// low→high in pitch within one octave (root-3-5, 3-5-root or 5-root-3) and must
+// fit under the hand (fret span ≤ 5). Shapes cycle every 12 frets, so the three
+// lowest are always one of each inversion. Returns [{ inv: 0..2, frets: [lo,mid,hi] }]
+// ordered up the neck — e.g. G major on G B e: 4-3-3, 7-8-7, 12-12-10.
+function buildTriadShapes(root, quality, lo) {
+  const tones = [root, (root + (quality === 'Major' ? 4 : 3)) % 12, (root + 7) % 12];
+  const strs  = [lo, lo + 1, lo + 2];
+  const cands = [];
+  for (let f0 = 0; f0 <= MAX_FRET; f0++) {
+    const inv = tones.indexOf(noteAt(strs[0], f0));
+    if (inv < 0) continue;
+    const want  = [tones[inv], tones[(inv + 1) % 3], tones[(inv + 2) % 3]];
+    const frets = [f0];
+    for (let i = 1; i < 3; i++) {
+      // lowest fret on this string sounding the wanted tone above the previous one
+      const prev = OPEN_MIDI[strs[i - 1]] + frets[i - 1];
+      let f = (want[i] - OPEN[strs[i]] + 12) % 12;
+      while (OPEN_MIDI[strs[i]] + f <= prev) f += 12;
+      frets.push(f);
+    }
+    const spread = OPEN_MIDI[strs[2]] + frets[2] - (OPEN_MIDI[strs[0]] + f0);
+    const hi = Math.max(...frets), lowF = Math.min(...frets);
+    if (spread >= 12 || hi > MAX_FRET || hi - lowF > 5) continue;
+    cands.push({ inv, frets });
+  }
+  const minF = c => Math.min(...c.frets), maxF = c => Math.max(...c.frets);
+  cands.sort((a, b) => minF(a) - minF(b) || maxF(a) - maxF(b));
+  const picked = [];
+  for (const c of cands) {
+    if (picked.length === 3) break;
+    if (!picked.some(p => p.inv === c.inv)) picked.push(c);
+  }
+  return picked.sort((a, b) => minF(a) - minF(b));
 }
 
 // Convex hull (Andrew's monotone chain) of [x,y] points, collinear points dropped.
@@ -1462,8 +1554,47 @@ function syncScaleSideControls() {
     b.classList.toggle('on', b.dataset.val === (bluesLock ? 'full' : shape));
   });
 
+  const triads = S.gameType === 'triads';
+  document.getElementById('field-tonality').classList.toggle('hide', triads);
+  document.getElementById('field-shape').classList.toggle('hide', triads);
+  document.getElementById('field-triad').classList.toggle('hide', !triads);
+  document.getElementById('field-strings').classList.toggle('hide', !triads);
+  document.querySelectorAll('#seg-triad .seg-btn').forEach(b => {
+    b.classList.toggle('on', b.dataset.val === S.triadQuality);
+  });
+  document.querySelectorAll('#seg-strings .seg-btn').forEach(b => {
+    b.classList.toggle('on', parseInt(b.dataset.val, 10) === S.triadLo);
+  });
+  document.getElementById('triad-sel').value   = S.triadQuality;
+  document.getElementById('strings-sel').value = String(S.triadLo);
+
   document.getElementById('kc-key-name').textContent   = NOTES[S.root];
-  document.getElementById('kc-scale-name').textContent = S.scale;
+  document.getElementById('kc-scale-name').textContent =
+    triads ? `${S.triadQuality} Triad` : S.scale;
+}
+
+// Triads: header "Strings" select + side-panel string-set switch.
+function buildTriadControls() {
+  const sel = document.getElementById('strings-sel');
+  const seg = document.getElementById('seg-strings');
+  TRIAD_STRING_SETS.forEach(({ lo, label }) => {
+    const o = document.createElement('option');
+    o.value = lo; o.textContent = label;
+    sel.appendChild(o);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'seg-btn';
+    b.dataset.val = lo;
+    b.textContent = label;
+    seg.appendChild(b);
+  });
+}
+
+function setTriadSelection(quality, lo) {
+  S.triadQuality = quality;
+  S.triadLo = lo;
+  styleAll();
+  syncScaleSideControls();
 }
 
 function buildLegend() {
@@ -1641,7 +1772,9 @@ function setDotClass(d, cls, bg) {
 }
 
 function styleAll() {
-  if (S.gameType === 'notehunt')     styleAllNoteHunt();
+  clearTriadOutlines();
+  if (S.gameType === 'triads')       styleAllTriads();
+  else if (S.gameType === 'notehunt') styleAllNoteHunt();
   else if (S.gameType === 'noteid')  styleAllNoteId();
   else                                styleAllScale();
 }
@@ -1732,6 +1865,79 @@ function styleAllNoteHunt() {
   }
 }
 
+// Triads (view only): light the three voicings on the chosen string set, root
+// marked like everywhere else; every other cell stays dark and unlabeled.
+function styleAllTriads() {
+  const shapes = buildTriadShapes(S.root, S.triadQuality, S.triadLo);
+  const lit = new Set();
+  shapes.forEach(sh => sh.frets.forEach((f, i) => lit.add(pk(S.triadLo + i, f))));
+
+  for (let s = 0; s < 6; s++) {
+    for (let f = 0; f <= MAX_FRET; f++) {
+      const d   = dot(s, f);
+      const ni  = noteAt(s, f);
+      const col = NOTE_COLORS[ni];
+      d.style.setProperty('--nc', col);
+      if (lit.has(pk(s, f))) {
+        setDotText(d, NOTES[ni]);
+        setDotClass(d, ni === S.root ? 'b-in root' : 'b-in', col);
+        if (ni !== S.root) d.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.85), 0 0 8px var(--nc)';
+      } else {
+        setDotText(d, '');
+        setDotClass(d, 'b-out');
+      }
+    }
+  }
+  drawTriadOutlines(shapes);
+}
+
+function clearTriadOutlines() {
+  document.querySelectorAll('#pattern-overlay .triad-outline, #pattern-overlay .triad-tag')
+    .forEach(n => n.remove());
+}
+
+// Outline each voicing and tag it with its inversion. The tag sits on the side
+// of the board away from the string set so it never covers a lit note.
+function drawTriadOutlines(shapes) {
+  const fb = document.getElementById('fretboard');
+  const ov = document.getElementById('pattern-overlay');
+  if (!fb || !ov) return;
+  ov.setAttribute('viewBox', `0 0 ${fb.clientWidth} ${fb.clientHeight}`);
+
+  const fbr = fb.getBoundingClientRect();
+  const ox  = fbr.left + fb.clientLeft;
+  const oy  = fbr.top  + fb.clientTop;
+  const tagBelow = S.triadLo >= 2; // set in the upper half of the board
+  const PAD = 7;
+
+  shapes.forEach(sh => {
+    const pts = [];
+    sh.frets.forEach((f, i) => {
+      const el = dot(S.triadLo + i, f);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const x0 = r.left - ox - PAD, y0 = r.top - oy - PAD;
+      const x1 = r.right - ox + PAD, y1 = r.bottom - oy + PAD;
+      pts.push([x0, y0], [x1, y0], [x1, y1], [x0, y1]);
+    });
+    if (pts.length < 3) return;
+    const hull = convexHull(pts);
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M' + hull.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L') + 'Z');
+    path.setAttribute('class', 'triad-outline');
+    ov.appendChild(path);
+
+    const xs = hull.map(p => p[0]), ys = hull.map(p => p[1]);
+    const tag = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tag.setAttribute('x', ((Math.min(...xs) + Math.max(...xs)) / 2).toFixed(1));
+    tag.setAttribute('y', (tagBelow ? Math.max(...ys) + 14 : Math.min(...ys) - 6).toFixed(1));
+    tag.setAttribute('class', 'triad-tag');
+    tag.textContent = TRIAD_INVERSIONS[sh.inv];
+    ov.appendChild(tag);
+  });
+}
+
 // Note ID accuracy overlay: fill a dot from the bottom in proportion to how
 // often this exact cell has been identified correctly across all past rounds.
 function styleAccuracyDot(d, rec, col) {
@@ -1795,6 +2001,7 @@ function styleAllNoteId() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGame() {
+  if (S.gameType === 'triads') return; // view only — no game yet
   stopScaleClock();
   clearPatternOverlay();
   if (S.gameType === 'notehunt')    startNoteHunt();
@@ -2309,12 +2516,17 @@ function refreshUI() {
   const showNotesWrap = document.getElementById('show-notes-wrap');
 
   modeSel.disabled = (mode === 'playing');
-  keyGroup.classList.toggle('hide', gameType !== 'scale');
+  const triads = gameType === 'triads';
+  keyGroup.classList.toggle('hide', gameType !== 'scale' && !triads);
   scaleGroup.classList.toggle('hide', gameType !== 'scale');
+  document.getElementById('triad-group').classList.toggle('hide', !triads);
+  document.getElementById('strings-group').classList.toggle('hide', !triads);
+  startBtn.classList.toggle('hide', triads);
   document.getElementById('board-side').classList.toggle('hide',
-    !(gameType === 'scale' && mode !== 'playing'));
+    !((gameType === 'scale' || triads) && mode !== 'playing'));
   syncScaleSideControls();
-  document.getElementById('random-scale-btn').classList.toggle('hide', gameType !== 'scale' || mode === 'playing');
+  document.getElementById('random-scale-btn').classList.toggle('hide',
+    (gameType !== 'scale' && !triads) || mode === 'playing');
   noteTarget.classList.toggle('hide', !(gameType === 'notehunt' && mode === 'playing'));
   progPill.classList.toggle('hide', gameType === 'scale');
   timePill.classList.toggle('hide',
@@ -2366,6 +2578,8 @@ function alignNotePicker() {
 }
 
 window.addEventListener('resize', alignNotePicker);
+// Triad outlines are measured from the laid-out cells, so redraw on resize.
+window.addEventListener('resize', () => { if (S.gameType === 'triads') styleAll(); });
 
 function refreshGameBar() {
   const g = S.game;
@@ -2726,8 +2940,38 @@ document.getElementById('seg-shape').addEventListener('click', e => {
   setScaleSelection(S.root, scaleFromControls(curTon, btn.dataset.val));
 });
 
+document.getElementById('triad-sel').addEventListener('change', e => {
+  setTriadSelection(e.target.value, S.triadLo);
+});
+
+document.getElementById('strings-sel').addEventListener('change', e => {
+  setTriadSelection(S.triadQuality, parseInt(e.target.value, 10));
+});
+
+document.getElementById('seg-triad').addEventListener('click', e => {
+  const btn = e.target.closest('.seg-btn');
+  if (btn) setTriadSelection(btn.dataset.val, S.triadLo);
+});
+
+document.getElementById('seg-strings').addEventListener('click', e => {
+  const btn = e.target.closest('.seg-btn');
+  if (btn) setTriadSelection(S.triadQuality, parseInt(btn.dataset.val, 10));
+});
+
 document.getElementById('random-scale-btn').addEventListener('click', () => {
   if (S.mode === 'playing') return;
+  if (S.gameType === 'triads') {
+    const before = `${S.root}|${S.triadQuality}|${S.triadLo}`;
+    do {
+      S.root = Math.floor(Math.random() * 12);
+      S.triadQuality = Math.random() < 0.5 ? 'Major' : 'Minor';
+      S.triadLo = Math.floor(Math.random() * 4);
+    } while (`${S.root}|${S.triadQuality}|${S.triadLo}` === before);
+    document.getElementById('key-sel').value = S.root;
+    styleAll();
+    syncScaleSideControls();
+    return;
+  }
   const scaleNames = Object.keys(SCALES);
   const before = `${S.root}|${S.scale}`;
   do {
@@ -2825,6 +3069,7 @@ document.getElementById('acc-clear').addEventListener('click', e => {
 
 buildSelects();
 buildKeyCircle();
+buildTriadControls();
 buildFretboard();
 buildLegend();
 buildNotePicker();
