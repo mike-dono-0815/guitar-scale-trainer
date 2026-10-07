@@ -632,6 +632,52 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 }
 
 
+/* Scale Practice: the diatonic chords of the current key, above the board.
+   Pentatonic / Blues scales show the chords of their parent major or minor key. */
+.key-chords {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 14px 20px 0;
+}
+.key-chords.hide { display: none; }
+.kch-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.kch-label b { color: var(--text); font-weight: 700; letter-spacing: 0.04em; }
+.kch-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.kch-sep { color: var(--border); font-size: 0.8rem; }
+.kch-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 46px;
+  padding: 4px 9px 5px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-bottom: 2px solid var(--nc);
+  border-radius: 6px;
+}
+.kch-chip.tonic { border-color: var(--gold); border-bottom-color: var(--nc); box-shadow: 0 0 10px -2px rgba(233,168,62,0.55); }
+.kch-num {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  line-height: 1.2;
+}
+.kch-name {
+  font-family: 'Big Shoulders Display', 'Hanken Grotesk', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
 /* â”€â”€ Board + side panel row â”€â”€ */
 .board-row {
   display: flex;
@@ -1119,6 +1165,12 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   <button class="btn btn-warning" id="complete-btn">Complete Round</button>
 </div>
 
+<!-- Scale Practice: diatonic chords of the current key -->
+<div class="key-chords hide" id="key-chords">
+  <span class="kch-label" id="kch-label">Chords in <b>E minor</b></span>
+  <div class="kch-list" id="kch-list"></div>
+</div>
+
 <!-- Fretboard -->
 <div class="board-row">
   <div class="fretboard-outer">
@@ -1571,6 +1623,69 @@ function syncScaleSideControls() {
   document.getElementById('kc-key-name').textContent   = NOTES[S.root];
   document.getElementById('kc-scale-name').textContent =
     triads ? `${S.triadQuality} Triad` : S.scale;
+
+  renderKeyChords();
+}
+
+// ── Key chords (Scale Practice) ──
+
+const LETTERS   = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
+const ROMAN     = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+
+// Name the seven notes of a heptatonic scale with one letter each (so F major
+// gets Bb, not A#). Starts from the app's sharp name for the root; if that
+// forces double sharps (A# / D# / G# major) it respells from the flat enharmonic.
+function spellHeptatonic(root, intervals) {
+  const spell = (letterIdx) => intervals.map((iv, i) => {
+    const li   = (letterIdx + i) % 7;
+    const diff = ((root + iv - LETTER_PC[li]) % 12 + 18) % 12 - 6;
+    return { name: LETTERS[li] + (diff > 0 ? '#' : 'b').repeat(Math.abs(diff)), diff };
+  });
+  const sharpLetter = LETTERS.indexOf(NOTES[root][0]);
+  let names = spell(sharpLetter);
+  if (names.some(n => Math.abs(n.diff) > 1)) names = spell((sharpLetter + 1) % 7);
+  return names.map(n => n.name);
+}
+
+// The seven diatonic triads of the key behind the current scale. Pentatonic and
+// Blues scales borrow the chords of their parent major / natural minor key.
+function renderKeyChords() {
+  const wrap = document.getElementById('key-chords');
+  const show = S.gameType === 'scale';
+  wrap.classList.toggle('hide', !show);
+  if (!show) return;
+
+  const [ton] = SCALE_TO_CONTROLS[S.scale] || ['Minor'];
+  const keyScale  = ton === 'Major' ? 'Major' : 'Natural Minor';
+  const intervals = SCALES[keyScale];
+  const names     = spellHeptatonic(S.root, intervals);
+
+  document.getElementById('kch-label').innerHTML =
+    `Chords in <b>${names[0]} ${ton === 'Major' ? 'major' : 'minor'}</b>`;
+
+  const list = document.getElementById('kch-list');
+  list.innerHTML = '';
+  intervals.forEach((iv, i) => {
+    const third = (intervals[(i + 2) % 7] - iv + 12) % 12;
+    const fifth = (intervals[(i + 4) % 7] - iv + 12) % 12;
+    const minor = third === 3;
+    const dim   = minor && fifth === 6;
+    const suffix = dim ? '°' : minor ? 'm' : '';
+    const num    = (minor ? ROMAN[i].toLowerCase() : ROMAN[i]) + (dim ? '°' : '');
+
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'kch-sep';
+      sep.textContent = '–';
+      list.appendChild(sep);
+    }
+    const chip = document.createElement('div');
+    chip.className = 'kch-chip' + (i === 0 ? ' tonic' : '');
+    chip.style.setProperty('--nc', NOTE_COLORS[(S.root + iv) % 12]);
+    chip.innerHTML = `<span class="kch-num">${num}</span><span class="kch-name">${names[i]}${suffix}</span>`;
+    list.appendChild(chip);
+  });
 }
 
 // Triads: header "Strings" select + side-panel string-set switch.
