@@ -513,28 +513,33 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
   box-shadow: 0 0 9px var(--nc), 0 0 0 2px rgba(255,255,255,0.5);
 }
-/* The scale's root — deliberately loud so the key is unmistakable: bigger,
-   a thick gold ring, a wide amber glow, a bolder label, and lifted above its
-   neighbours so nothing clips the halo. Shared by browse / play / result. */
+/* The scale's root — a different SHAPE, not just a different ring, so it reads
+   at a glance even among the coloured in-scale dots: a rounded square with a
+   thick white border, a gold outer ring and a wide amber glow, enlarged and
+   lifted above its neighbours so nothing clips the halo. Shared by
+   browse / play / result. */
 .scell.is-root { z-index: 5; }
 .ndot.b-in.root,
 .ndot.g-ok.root,
-.ndot.r-found.root {
-  border-color: #fff;
-  transform: scale(1.2);
+.ndot.r-found.root,
+.ndot.r-missed.root {
+  border: 3px solid #fff;
+  border-radius: 7px;
+  transform: scale(1.22);
   box-shadow:
     0 0 0 3px var(--gold),
     0 0 0 5px rgba(20,14,6,0.9),
-    0 0 16px 4px rgba(233,168,62,0.95),
-    0 0 30px 8px rgba(233,168,62,0.5);
+    0 0 16px 5px rgba(233,168,62,0.95),
+    0 0 32px 10px rgba(233,168,62,0.55);
 }
-.scell:hover  .ndot.root { transform: scale(1.32); }
+.scell:hover  .ndot.root { transform: scale(1.34); }
 .scell:active .ndot.root { transform: scale(1.12); }
 .scell.is-root .nlbl {
-  font-size: 0.66rem;
+  font-size: 0.86rem;
   font-weight: 800;
   text-shadow: 0 0 3px rgba(0,0,0,0.95), 0 1px 3px rgba(0,0,0,0.9);
 }
+.scell.is-root:hover  .nlbl { transform: translate(-50%, -50%) scale(1.1); }
 /* Game: wrong tap */
 .ndot.g-wrong {
   background: #440e0e !important;
@@ -1008,6 +1013,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   .ndot { width: 24px; height: 24px; }
   .nlbl { font-size: 0.68rem; }
   .scell[data-dot="acc-dot"] .nlbl { font-size: 0.56rem; }
+  .scell.is-root .nlbl { font-size: 0.74rem; }
   .result-card { padding: 22px 18px 18px; }
 }
 </style>
@@ -1684,7 +1690,7 @@ function styleAllScale() {
       } else { // result
         if (inScale) {
           let cls = game.correct.has(key) ? 'r-found' : 'r-missed';
-          if (cls === 'r-found' && ni === root) cls = 'r-found root';
+          if (ni === root) cls += ' root';
           setDotClass(d, cls, col);
         } else {
           if (game.wrongPos.has(key)) setDotClass(d, 'r-wrong-tap');
