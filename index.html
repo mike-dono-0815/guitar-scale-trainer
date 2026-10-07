@@ -677,6 +677,13 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
   color: var(--text);
   line-height: 1.1;
 }
+.kch-qual {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
 
 /* â”€â”€ Board + side panel row â”€â”€ */
 .board-row {
@@ -1683,7 +1690,9 @@ function renderKeyChords() {
     const chip = document.createElement('div');
     chip.className = 'kch-chip' + (i === 0 ? ' tonic' : '');
     chip.style.setProperty('--nc', NOTE_COLORS[(S.root + iv) % 12]);
-    chip.innerHTML = `<span class="kch-num">${num}</span><span class="kch-name">${names[i]}${suffix}</span>`;
+    const qual   = dim ? 'Dim' : minor ? 'Minor' : 'Major';
+    chip.innerHTML = `<span class="kch-num">${num}</span><span class="kch-name">${names[i]}${suffix}</span>` +
+      `<span class="kch-qual">${qual}</span>`;
     list.appendChild(chip);
   });
 }
