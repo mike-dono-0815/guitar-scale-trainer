@@ -651,7 +651,18 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224,144,4
 }
 .kch-label b { color: var(--text); font-weight: 700; letter-spacing: 0.04em; }
 .kch-list { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.kch-sep { color: var(--border); font-size: 0.8rem; }
+.kch-sep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  color: var(--text-dim);
+  line-height: 1.15;
+}
+.kch-arrow { font-size: 0.8rem; color: var(--border); }
+.kch-step  { font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.kch-sep.half .kch-step { color: var(--accent-h); }
+.kch-sep-end { opacity: 0.7; }
 .kch-chip {
   display: flex;
   flex-direction: column;
@@ -1681,12 +1692,7 @@ function renderKeyChords() {
     const suffix = dim ? '°' : minor ? 'm' : '';
     const num    = (minor ? ROMAN[i].toLowerCase() : ROMAN[i]) + (dim ? '°' : '');
 
-    if (i > 0) {
-      const sep = document.createElement('span');
-      sep.className = 'kch-sep';
-      sep.textContent = '–';
-      list.appendChild(sep);
-    }
+    if (i > 0) list.appendChild(stepSep(iv - intervals[i - 1]));
     const chip = document.createElement('div');
     chip.className = 'kch-chip' + (i === 0 ? ' tonic' : '');
     chip.style.setProperty('--nc', NOTE_COLORS[(S.root + iv) % 12]);
@@ -1695,6 +1701,21 @@ function renderKeyChords() {
       `<span class="kch-qual">${qual}</span>`;
     list.appendChild(chip);
   });
+  // Closing step from the 7th degree back up to the octave.
+  const last = stepSep(12 - intervals[6]);
+  last.classList.add('kch-sep-end');
+  last.title = `back to ${names[0]}`;
+  last.lastChild.textContent += ' ↺';
+  list.appendChild(last);
+}
+
+// Whole / half step between two adjacent scale degrees, drawn between the chips.
+function stepSep(semis) {
+  const sep = document.createElement('span');
+  sep.className = 'kch-sep';
+  sep.innerHTML = `<span class="kch-arrow">→</span><span class="kch-step">${semis === 1 ? 'Half' : 'Whole'}</span>`;
+  sep.classList.toggle('half', semis === 1);
+  return sep;
 }
 
 // Triads: header "Strings" select + side-panel string-set switch.
